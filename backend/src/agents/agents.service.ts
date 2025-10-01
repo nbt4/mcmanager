@@ -12,6 +12,7 @@ export class AgentsService {
   private logs = new Map<string, string[]>(); // Store last 1000 lines per server
   private logCallbacks = new Map<string, Array<(log: string) => void>>(); // Real-time log callbacks
   private statusCallbacks = new Map<string, Array<(status: string) => void>>(); // Status change callbacks
+  private currentStatus = new Map<string, string>(); // Track current status per server
   private readonly MAX_LOG_LINES = 1000;
   private readonly serversBaseDir = process.env.SERVERS_BASE_DIR || '/data/minecraft';
   private readonly hostServersPath = process.env.HOST_SERVERS_PATH || '/opt/dev/mcmanager/minecraft-servers';
@@ -71,6 +72,9 @@ export class AgentsService {
     if (!this.logs.has(server.id)) {
       this.logs.set(server.id, []);
     }
+
+    // Emit STARTING status immediately
+    this.emitStatus(server.id, 'STARTING');
 
     // Log output and store in buffer
     serverProcess.stdout.on('data', (data) => {
@@ -304,6 +308,13 @@ export class AgentsService {
       this.statusCallbacks.set(serverId, []);
     }
     this.statusCallbacks.get(serverId)!.push(callback);
+
+    // Send current status immediately if available
+    const currentStatus = this.currentStatus.get(serverId);
+    if (currentStatus) {
+      this.logger.log(`[Status] Sending current status ${currentStatus} to new subscriber for server ${serverId}`);
+      callback(currentStatus);
+    }
   }
 
   unsubscribeFromStatus(serverId: string) {
@@ -324,23 +335,39 @@ export class AgentsService {
 
   private detectStatusFromLog(serverId: string, line: string) {
     // Detect "Done" message indicating server is ready
-    if (line.includes('Done') && line.includes('For help, type "help"')) {
+    // Vanilla/Paper: "Done (5.123s)! For help, type "help""
+    if (line.includes('Done') && (line.includes('For help') || line.includes('help'))) {
+      this.logger.log(`[Status] Server ${serverId} is now RUNNING`);
       this.emitStatus(serverId, 'RUNNING');
     }
     // Detect starting messages
-    else if (line.includes('Starting minecraft server')) {
+    // Common patterns: "Starting minecraft server", "Starting Minecraft server"
+    else if (line.toLowerCase().includes('starting minecraft server') ||
+             line.toLowerCase().includes('starting net.minecraft.server')) {
+      this.logger.log(`[Status] Server ${serverId} is STARTING`);
       this.emitStatus(serverId, 'STARTING');
     }
     // Detect stopping messages
-    else if (line.includes('Stopping server') || line.includes('Stopping the server')) {
+    else if (line.includes('Stopping server') ||
+             line.includes('Stopping the server') ||
+             line.includes('Saving worlds')) {
+      this.logger.log(`[Status] Server ${serverId} is STOPPING`);
       this.emitStatus(serverId, 'STOPPING');
     }
   }
 
   private emitStatus(serverId: string, status: string) {
+    this.logger.log(`[Status] Emitting status ${status} for server ${serverId}`);
+
+    // Store current status
+    this.currentStatus.set(serverId, status);
+
     const callbacks = this.statusCallbacks.get(serverId);
-    if (callbacks) {
+    if (callbacks && callbacks.length > 0) {
+      this.logger.log(`[Status] Broadcasting to ${callbacks.length} callback(s)`);
       callbacks.forEach(callback => callback(status));
+    } else {
+      this.logger.log(`[Status] No callbacks registered for server ${serverId}, status stored for later`);
     }
   }
 }
