@@ -198,6 +198,25 @@ export class ServersService {
     };
   }
 
+  async updateStatus(id: string, status: string) {
+    // Map status strings to ServerStatus enum
+    const statusMap: { [key: string]: ServerStatus } = {
+      'STOPPED': ServerStatus.STOPPED,
+      'STARTING': ServerStatus.STARTING,
+      'RUNNING': ServerStatus.RUNNING,
+      'STOPPING': ServerStatus.STOPPING,
+      'EXITED': ServerStatus.ERROR,
+      'RESTARTING': ServerStatus.STARTING,
+    };
+
+    const mappedStatus = statusMap[status] || ServerStatus.ERROR;
+
+    return this.prisma.server.update({
+      where: { id },
+      data: { status: mappedStatus },
+    });
+  }
+
   private async createDefaultProperties(serverId: string, dto: CreateServerDto) {
     const properties = [
       { key: 'server-port', value: dto.port.toString() },

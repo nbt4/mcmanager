@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { AgentsService } from '../agents/agents.service';
+import { ServersService } from './servers.service';
 
 @WebSocketGateway({
   cors: {
@@ -24,7 +25,10 @@ export class ServersGateway implements OnGatewayConnection, OnGatewayDisconnect 
   private readonly logger = new Logger(ServersGateway.name);
   private serverSubscriptions = new Map<string, Set<string>>(); // serverId -> Set of socketIds
 
-  constructor(private agentsService: AgentsService) {}
+  constructor(
+    private agentsService: AgentsService,
+    private serversService: ServersService,
+  ) {}
 
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
@@ -55,6 +59,14 @@ export class ServersGateway implements OnGatewayConnection, OnGatewayDisconnect 
       this.agentsService.subscribeToLogs(serverId, (log: string) => {
         this.broadcastLog(serverId, log);
       });
+      // Subscribe to status changes for this server
+      this.agentsService.subscribeToStatus(serverId, (status: string) => {
+        this.broadcastStatus(serverId, status);
+        // Update database with new status
+        this.serversService.updateStatus(serverId, status).catch(err => {
+          this.logger.error(`Failed to update status for server ${serverId}: ${err.message}`);
+        });
+      });
     }
 
     this.serverSubscriptions.get(serverId)!.add(client.id);
@@ -78,6 +90,7 @@ export class ServersGateway implements OnGatewayConnection, OnGatewayDisconnect 
       if (clients.size === 0) {
         this.serverSubscriptions.delete(serverId);
         this.agentsService.unsubscribeFromLogs(serverId);
+        this.agentsService.unsubscribeFromStatus(serverId);
       }
     }
 
@@ -104,6 +117,15 @@ export class ServersGateway implements OnGatewayConnection, OnGatewayDisconnect 
     if (clients) {
       for (const clientId of clients) {
         this.server.to(clientId).emit('log', { log });
+      }
+    }
+  }
+
+  private broadcastStatus(serverId: string, status: string) {
+    const clients = this.serverSubscriptions.get(serverId);
+    if (clients) {
+      for (const clientId of clients) {
+        this.server.to(clientId).emit('status', { status });
       }
     }
   }

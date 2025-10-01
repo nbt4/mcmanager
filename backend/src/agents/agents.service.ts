@@ -11,6 +11,7 @@ export class AgentsService {
   private processes = new Map<string, ChildProcess>();
   private logs = new Map<string, string[]>(); // Store last 1000 lines per server
   private logCallbacks = new Map<string, Array<(log: string) => void>>(); // Real-time log callbacks
+  private statusCallbacks = new Map<string, Array<(status: string) => void>>(); // Status change callbacks
   private readonly MAX_LOG_LINES = 1000;
   private readonly serversBaseDir = process.env.SERVERS_BASE_DIR || '/data/minecraft';
   private readonly hostServersPath = process.env.HOST_SERVERS_PATH || '/opt/dev/mcmanager/minecraft-servers';
@@ -77,6 +78,7 @@ export class AgentsService {
       lines.forEach(line => {
         this.logger.log(`[${server.name}] ${line}`);
         this.addLog(server.id, line);
+        this.detectStatusFromLog(server.id, line);
       });
     });
 
@@ -91,6 +93,11 @@ export class AgentsService {
     serverProcess.on('exit', (code) => {
       this.logger.log(`[${server.name}] Process exited with code ${code}`);
       this.addLog(server.id, `[INFO] Server process exited with code ${code}`);
+
+      // Determine exit status
+      const status = code === 0 ? 'STOPPED' : 'EXITED';
+      this.emitStatus(server.id, status);
+
       this.processes.delete(server.id);
     });
 
@@ -292,6 +299,17 @@ export class AgentsService {
     this.logCallbacks.delete(serverId);
   }
 
+  subscribeToStatus(serverId: string, callback: (status: string) => void) {
+    if (!this.statusCallbacks.has(serverId)) {
+      this.statusCallbacks.set(serverId, []);
+    }
+    this.statusCallbacks.get(serverId)!.push(callback);
+  }
+
+  unsubscribeFromStatus(serverId: string) {
+    this.statusCallbacks.delete(serverId);
+  }
+
   async sendCommand(serverId: string, command: string) {
     const process = this.processes.get(serverId);
 
@@ -302,5 +320,27 @@ export class AgentsService {
     // Send command to server's stdin
     process.stdin.write(`${command}\n`);
     this.addLog(serverId, `> ${command}`);
+  }
+
+  private detectStatusFromLog(serverId: string, line: string) {
+    // Detect "Done" message indicating server is ready
+    if (line.includes('Done') && line.includes('For help, type "help"')) {
+      this.emitStatus(serverId, 'RUNNING');
+    }
+    // Detect starting messages
+    else if (line.includes('Starting minecraft server')) {
+      this.emitStatus(serverId, 'STARTING');
+    }
+    // Detect stopping messages
+    else if (line.includes('Stopping server') || line.includes('Stopping the server')) {
+      this.emitStatus(serverId, 'STOPPING');
+    }
+  }
+
+  private emitStatus(serverId: string, status: string) {
+    const callbacks = this.statusCallbacks.get(serverId);
+    if (callbacks) {
+      callbacks.forEach(callback => callback(status));
+    }
   }
 }

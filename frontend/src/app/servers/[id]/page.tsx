@@ -30,6 +30,7 @@ export default function ServerDetailPage() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const consoleRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
 
   // WebSocket connection
   useEffect(() => {
@@ -51,6 +52,11 @@ export default function ServerDetailPage() {
 
     newSocket.on('log', (data: { log: string }) => {
       setLogs(prev => [...prev, data.log]);
+    });
+
+    newSocket.on('status', (data: { status: string }) => {
+      console.log('Status update:', data.status);
+      setLiveStatus(data.status);
     });
 
     newSocket.on('error', (data: { message: string }) => {
@@ -128,14 +134,19 @@ export default function ServerDetailPage() {
       case 'RUNNING':
         return 'success';
       case 'STOPPED':
+      case 'EXITED':
         return 'error';
       case 'STARTING':
       case 'STOPPING':
+      case 'RESTARTING':
         return 'warning';
       default:
         return 'secondary';
     }
   };
+
+  // Use live status if available, otherwise use server status from API
+  const currentStatus = liveStatus || server?.status || 'UNKNOWN';
 
   return (
     <div className="min-h-screen bg-background">
@@ -158,8 +169,8 @@ export default function ServerDetailPage() {
             <div>
               <h1 className="text-3xl font-bold flex items-center gap-3">
                 {server.name}
-                <Badge variant={getStatusColor(server.status) as any}>
-                  {server.status}
+                <Badge variant={getStatusColor(currentStatus) as any}>
+                  {currentStatus}
                 </Badge>
               </h1>
               <p className="text-muted-foreground mt-2">
@@ -168,7 +179,7 @@ export default function ServerDetailPage() {
             </div>
 
             <div className="flex gap-2">
-              {server.status === 'STOPPED' && (
+              {(currentStatus === 'STOPPED' || currentStatus === 'EXITED') && (
                 <Button
                   onClick={() => startServer.mutateAsync(id)}
                   disabled={startServer.isPending}
@@ -178,7 +189,7 @@ export default function ServerDetailPage() {
                 </Button>
               )}
 
-              {server.status === 'RUNNING' && (
+              {currentStatus === 'RUNNING' && (
                 <>
                   <Button
                     variant="outline"
@@ -218,7 +229,7 @@ export default function ServerDetailPage() {
                   <CardDescription>Status</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{server.status}</div>
+                  <div className="text-2xl font-bold">{currentStatus}</div>
                 </CardContent>
               </Card>
 
@@ -315,7 +326,7 @@ export default function ServerDetailPage() {
                     ))
                   ) : (
                     <p className="text-gray-500">
-                      {server.status === 'RUNNING'
+                      {currentStatus === 'RUNNING'
                         ? 'Waiting for logs...'
                         : 'Server is not running. Start the server to see logs.'}
                     </p>
@@ -327,14 +338,14 @@ export default function ServerDetailPage() {
                     type="text"
                     value={command}
                     onChange={(e) => setCommand(e.target.value)}
-                    placeholder={server.status === 'RUNNING' ? 'Enter command (e.g., say Hello, list, stop)' : 'Server must be running to send commands'}
-                    disabled={server.status !== 'RUNNING'}
+                    placeholder={currentStatus === 'RUNNING' ? 'Enter command (e.g., say Hello, list, stop)' : 'Server must be running to send commands'}
+                    disabled={currentStatus !== 'RUNNING'}
                     className="flex-1 font-mono"
                   />
                   <Button
                     type="submit"
                     size="icon"
-                    disabled={server.status !== 'RUNNING' || !command.trim()}
+                    disabled={currentStatus !== 'RUNNING' || !command.trim()}
                   >
                     <Send className="h-4 w-4" />
                   </Button>
