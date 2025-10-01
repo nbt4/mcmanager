@@ -98,35 +98,52 @@ export function ServerSettings({ server }: ServerSettingsProps) {
                   <SelectValue placeholder="Select version" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(versions?.versions.release?.length ?? 0) > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Release Versions</SelectLabel>
-                      {versions?.versions.release?.map((version) => (
-                        <SelectItem key={version} value={version}>
-                          {version}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {(versions?.versions.beta?.length ?? 0) > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Beta / Snapshot Versions</SelectLabel>
-                      {versions?.versions.beta?.map((version) => (
-                        <SelectItem key={version} value={version}>
-                          {version}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {(versions?.versions.alpha?.length ?? 0) > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Alpha / Old Versions</SelectLabel>
-                      {versions?.versions.alpha?.map((version) => (
-                        <SelectItem key={version} value={version}>
-                          {version}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
+                  {versions?.groupedByMinecraftVersion ? (
+                    // Platform versions grouped by Minecraft version (Forge, Fabric, NeoForge)
+                    Object.entries(versions.versions as Record<string, string[]>).map(([mcVersion, platformVersions]) => (
+                      <SelectGroup key={mcVersion}>
+                        <SelectLabel>Minecraft {mcVersion}</SelectLabel>
+                        {platformVersions?.map((version) => (
+                          <SelectItem key={version} value={version}>
+                            {version}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))
+                  ) : (
+                    // Standard version grouping (Paper, Vanilla, etc.)
+                    <>
+                      {((versions?.versions as any)?.release?.length ?? 0) > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Release Versions</SelectLabel>
+                          {(versions?.versions as any)?.release?.map((version: string) => (
+                            <SelectItem key={version} value={version}>
+                              {version}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {((versions?.versions as any)?.beta?.length ?? 0) > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Beta / Snapshot Versions</SelectLabel>
+                          {(versions?.versions as any)?.beta?.map((version: string) => (
+                            <SelectItem key={version} value={version}>
+                              {version}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {((versions?.versions as any)?.alpha?.length ?? 0) > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Alpha / Old Versions</SelectLabel>
+                          {(versions?.versions as any)?.alpha?.map((version: string) => (
+                            <SelectItem key={version} value={version}>
+                              {version}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                    </>
                   )}
                 </SelectContent>
               </Select>

@@ -500,26 +500,41 @@ export class ServersService {
       const parsed = await parseStringPromise(response.data);
       const versions = parsed.metadata.versioning[0].versions[0].version || [];
 
-      const grouped = {
-        release: [],
-        beta: [],
-        alpha: [],
-      };
+      // Group by Minecraft version
+      const grouped: { [mcVersion: string]: string[] } = {};
 
       // Forge versions are in format: 1.20.1-47.2.0
       versions.reverse().forEach((version: string) => {
-        if (version.includes('-beta') || version.includes('-alpha')) {
-          grouped.alpha.push(version);
-        } else if (version.includes('-rc')) {
-          grouped.beta.push(version);
-        } else {
-          grouped.release.push(version);
+        const match = version.match(/^(\d+\.\d+(?:\.\d+)?)-/);
+        if (match) {
+          const mcVersion = match[1];
+          if (!grouped[mcVersion]) {
+            grouped[mcVersion] = [];
+          }
+          grouped[mcVersion].push(version);
         }
       });
 
+      // Convert to sorted array of MC versions (newest first)
+      const sortedVersions = {};
+      Object.keys(grouped)
+        .sort((a, b) => {
+          const partsA = a.split('.').map(Number);
+          const partsB = b.split('.').map(Number);
+          for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+            const diff = (partsB[i] || 0) - (partsA[i] || 0);
+            if (diff !== 0) return diff;
+          }
+          return 0;
+        })
+        .forEach(mcVersion => {
+          sortedVersions[mcVersion] = grouped[mcVersion];
+        });
+
       return {
         type: 'FORGE',
-        versions: grouped,
+        groupedByMinecraftVersion: true,
+        versions: sortedVersions,
       };
     } catch (error) {
       throw new BadRequestException('Failed to fetch Forge versions');
@@ -528,25 +543,32 @@ export class ServersService {
 
   private async getFabricVersions() {
     try {
-      const response = await axios.get('https://meta.fabricmc.net/v2/versions/loader');
-      const loaderVersions = response.data || [];
+      // Fetch both game versions and loader versions
+      const [gameResponse, loaderResponse] = await Promise.all([
+        axios.get('https://meta.fabricmc.net/v2/versions/game'),
+        axios.get('https://meta.fabricmc.net/v2/versions/loader'),
+      ]);
 
-      const grouped = {
-        release: [],
-        beta: [],
-        alpha: [],
-      };
+      const gameVersions = gameResponse.data || [];
+      const loaderVersions = loaderResponse.data || [];
 
-      loaderVersions.forEach((loader: any) => {
-        if (loader.stable) {
-          grouped.release.push(loader.version);
-        } else {
-          grouped.beta.push(loader.version);
-        }
+      // Get only stable release MC versions (not snapshots)
+      const stableGameVersions = gameVersions
+        .filter((game: any) => game.stable && !game.version.includes('w') && !game.version.includes('-'))
+        .map((game: any) => game.version);
+
+      // Get loader version strings
+      const loaders = loaderVersions.map((loader: any) => loader.version);
+
+      // Group loaders by MC version (all loaders work with all MC versions)
+      const grouped: { [mcVersion: string]: string[] } = {};
+      stableGameVersions.slice(0, 20).forEach((mcVersion: string) => {
+        grouped[mcVersion] = loaders.slice(0, 10); // Top 10 loaders for each MC version
       });
 
       return {
         type: 'FABRIC',
+        groupedByMinecraftVersion: true,
         versions: grouped,
       };
     } catch (error) {
@@ -559,25 +581,50 @@ export class ServersService {
       const response = await axios.get('https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge');
       const versions = response.data.versions || [];
 
-      const grouped = {
-        release: [],
-        beta: [],
-        alpha: [],
-      };
+      // Group by Minecraft version
+      // NeoForge format: 20.2.86 (MC 1.20.2), 20.4.10 (MC 1.20.4), 21.1.50 (MC 1.21.1)
+      const grouped: { [mcVersion: string]: string[] } = {};
 
       versions.reverse().forEach((version: string) => {
-        if (version.includes('-beta') || version.includes('-alpha')) {
-          grouped.alpha.push(version);
-        } else if (version.includes('-rc')) {
-          grouped.beta.push(version);
-        } else {
-          grouped.release.push(version);
+        // Parse NeoForge version to get MC version
+        const match = version.match(/^(\d+)\.(\d+)\./);
+        if (match) {
+          const major = parseInt(match[1]);
+          const minor = parseInt(match[2]);
+
+          // Convert NeoForge version to MC version
+          // 20.x → 1.20.x, 21.x → 1.21.x
+          const mcVersion = major >= 21 && minor === 0
+            ? `1.${major}`
+            : `1.${major}.${minor}`;
+
+          if (!grouped[mcVersion]) {
+            grouped[mcVersion] = [];
+          }
+          grouped[mcVersion].push(version);
         }
       });
 
+      // Sort MC versions (newest first)
+      const sortedVersions = {};
+      Object.keys(grouped)
+        .sort((a, b) => {
+          const partsA = a.split('.').map(Number);
+          const partsB = b.split('.').map(Number);
+          for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+            const diff = (partsB[i] || 0) - (partsA[i] || 0);
+            if (diff !== 0) return diff;
+          }
+          return 0;
+        })
+        .forEach(mcVersion => {
+          sortedVersions[mcVersion] = grouped[mcVersion];
+        });
+
       return {
         type: 'NEOFORGE',
-        versions: grouped,
+        groupedByMinecraftVersion: true,
+        versions: sortedVersions,
       };
     } catch (error) {
       throw new BadRequestException('Failed to fetch NeoForge versions');

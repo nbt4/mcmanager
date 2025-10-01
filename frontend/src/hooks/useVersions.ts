@@ -9,9 +9,14 @@ interface VersionGroup {
   alpha: string[];
 }
 
+interface GroupedVersions {
+  [mcVersion: string]: string[];
+}
+
 interface VersionResponse {
   type: string;
-  versions: VersionGroup;
+  groupedByMinecraftVersion?: boolean;
+  versions: VersionGroup | GroupedVersions;
 }
 
 export function useVersions(serverType: string) {
