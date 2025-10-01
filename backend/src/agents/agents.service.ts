@@ -10,6 +10,7 @@ export class AgentsService {
   private readonly logger = new Logger(AgentsService.name);
   private processes = new Map<string, ChildProcess>();
   private logs = new Map<string, string[]>(); // Store last 1000 lines per server
+  private logCallbacks = new Map<string, Array<(log: string) => void>>(); // Real-time log callbacks
   private readonly MAX_LOG_LINES = 1000;
   private readonly serversBaseDir = process.env.SERVERS_BASE_DIR || '/data/minecraft';
   private readonly hostServersPath = process.env.HOST_SERVERS_PATH || '/opt/dev/mcmanager/minecraft-servers';
@@ -259,7 +260,8 @@ export class AgentsService {
   private addLog(serverId: string, line: string) {
     const logs = this.logs.get(serverId) || [];
     const timestamp = new Date().toISOString();
-    logs.push(`[${timestamp}] ${line}`);
+    const logLine = `[${timestamp}] ${line}`;
+    logs.push(logLine);
 
     // Keep only last MAX_LOG_LINES
     if (logs.length > this.MAX_LOG_LINES) {
@@ -267,9 +269,38 @@ export class AgentsService {
     }
 
     this.logs.set(serverId, logs);
+
+    // Emit to real-time subscribers
+    const callbacks = this.logCallbacks.get(serverId);
+    if (callbacks) {
+      callbacks.forEach(callback => callback(logLine));
+    }
   }
 
   getLogs(serverId: string): string[] {
     return this.logs.get(serverId) || [];
+  }
+
+  subscribeToLogs(serverId: string, callback: (log: string) => void) {
+    if (!this.logCallbacks.has(serverId)) {
+      this.logCallbacks.set(serverId, []);
+    }
+    this.logCallbacks.get(serverId)!.push(callback);
+  }
+
+  unsubscribeFromLogs(serverId: string) {
+    this.logCallbacks.delete(serverId);
+  }
+
+  async sendCommand(serverId: string, command: string) {
+    const process = this.processes.get(serverId);
+
+    if (!process || process.killed) {
+      throw new Error('Server is not running');
+    }
+
+    // Send command to server's stdin
+    process.stdin.write(`${command}\n`);
+    this.addLog(serverId, `> ${command}`);
   }
 }

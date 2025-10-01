@@ -1,26 +1,84 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, Play, Square, RotateCcw, Download, FileText, Settings as SettingsIcon } from 'lucide-react';
+import { ArrowLeft, Play, Square, RotateCcw, Download, FileText, Settings as SettingsIcon, Send } from 'lucide-react';
 import { Navbar } from '@/components/layout/navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useServer, useStartServer, useStopServer, useRestartServer, useServerLogs } from '@/hooks/useServers';
+import { Input } from '@/components/ui/input';
+import { useServer, useStartServer, useStopServer, useRestartServer } from '@/hooks/useServers';
 import { useBackups } from '@/hooks/useBackups';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
 
 export default function ServerDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const { data: server, isLoading } = useServer(id);
   const { data: backups } = useBackups(id);
-  const { data: logsData } = useServerLogs(id, server?.status === 'RUNNING');
   const startServer = useStartServer();
   const stopServer = useStopServer();
   const restartServer = useRestartServer();
+
+  // Console state
+  const [logs, setLogs] = useState<string[]>([]);
+  const [command, setCommand] = useState('');
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const consoleRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  // WebSocket connection
+  useEffect(() => {
+    if (!id) return;
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const newSocket = io(`${API_URL}/console`, {
+      transports: ['websocket', 'polling'],
+    });
+
+    newSocket.on('connect', () => {
+      console.log('Connected to console WebSocket');
+      newSocket.emit('subscribe', { serverId: id });
+    });
+
+    newSocket.on('logs', (data: { logs: string[] }) => {
+      setLogs(data.logs);
+    });
+
+    newSocket.on('log', (data: { log: string }) => {
+      setLogs(prev => [...prev, data.log]);
+    });
+
+    newSocket.on('error', (data: { message: string }) => {
+      console.error('Console error:', data.message);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.emit('unsubscribe', { serverId: id });
+      newSocket.disconnect();
+    };
+  }, [id]);
+
+  // Auto-scroll
+  useEffect(() => {
+    if (autoScroll && consoleRef.current) {
+      consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+    }
+  }, [logs, autoScroll]);
+
+  const handleSendCommand = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!command.trim() || !socket) return;
+
+    socket.emit('command', { serverId: id, command });
+    setCommand('');
+  };
 
   if (isLoading) {
     return (
@@ -239,12 +297,20 @@ export default function ServerDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Server Console</CardTitle>
-                <CardDescription>View live server logs{server.status === 'RUNNING' && ' (refreshes every 2 seconds)'}</CardDescription>
+                <CardDescription>Real-time server logs and command execution</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="bg-black text-green-400 font-mono text-sm p-4 rounded h-96 overflow-auto">
-                  {logsData && logsData.logs.length > 0 ? (
-                    logsData.logs.map((log, i) => (
+              <CardContent className="space-y-4">
+                <div
+                  ref={consoleRef}
+                  className="bg-black text-green-400 font-mono text-sm p-4 rounded h-96 overflow-auto"
+                  onScroll={(e) => {
+                    const target = e.target as HTMLDivElement;
+                    const isScrolledToBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 10;
+                    setAutoScroll(isScrolledToBottom);
+                  }}
+                >
+                  {logs.length > 0 ? (
+                    logs.map((log, i) => (
                       <div key={i} className="whitespace-pre-wrap break-all">{log}</div>
                     ))
                   ) : (
@@ -255,6 +321,24 @@ export default function ServerDetailPage() {
                     </p>
                   )}
                 </div>
+
+                <form onSubmit={handleSendCommand} className="flex gap-2">
+                  <Input
+                    type="text"
+                    value={command}
+                    onChange={(e) => setCommand(e.target.value)}
+                    placeholder={server.status === 'RUNNING' ? 'Enter command (e.g., say Hello, list, stop)' : 'Server must be running to send commands'}
+                    disabled={server.status !== 'RUNNING'}
+                    className="flex-1 font-mono"
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={server.status !== 'RUNNING' || !command.trim()}
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </form>
               </CardContent>
             </Card>
           </TabsContent>
