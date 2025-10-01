@@ -7,6 +7,7 @@ import { ServerStatus } from '../common/enums';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import axios from 'axios';
+import { parseStringPromise } from 'xml2js';
 
 @Injectable()
 export class ServersService {
@@ -408,17 +409,27 @@ export class ServersService {
   async getAvailableVersions(type: string) {
     const serverType = type.toUpperCase();
 
-    if (serverType === 'PAPER') {
-      return this.getPaperVersions();
-    } else if (serverType === 'VANILLA') {
-      return this.getVanillaVersions();
-    } else if (serverType === 'SPIGOT' || serverType === 'BUKKIT') {
-      return this.getVanillaVersions();
-    } else if (serverType === 'FORGE' || serverType === 'FABRIC') {
-      return this.getVanillaVersions();
+    switch (serverType) {
+      case 'PAPER':
+        return this.getPaperVersions();
+      case 'VANILLA':
+        return this.getVanillaVersions();
+      case 'SPIGOT':
+      case 'BUKKIT':
+        return this.getSpigotVersions();
+      case 'FORGE':
+        return this.getForgeVersions();
+      case 'FABRIC':
+        return this.getFabricVersions();
+      case 'NEOFORGE':
+        return this.getNeoForgeVersions();
+      case 'PURPUR':
+        return this.getPurpurVersions();
+      case 'FOLIA':
+        return this.getFoliaVersions();
+      default:
+        throw new BadRequestException(`Unsupported server type: ${type}`);
     }
-
-    throw new BadRequestException(`Unsupported server type: ${type}`);
   }
 
   private async getPaperVersions() {
@@ -480,6 +491,150 @@ export class ServersService {
       };
     } catch (error) {
       throw new BadRequestException('Failed to fetch Vanilla versions');
+    }
+  }
+
+  private async getForgeVersions() {
+    try {
+      const response = await axios.get('https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml');
+      const parsed = await parseStringPromise(response.data);
+      const versions = parsed.metadata.versioning[0].versions[0].version || [];
+
+      const grouped = {
+        release: [],
+        beta: [],
+        alpha: [],
+      };
+
+      // Forge versions are in format: 1.20.1-47.2.0
+      versions.reverse().forEach((version: string) => {
+        if (version.includes('-beta') || version.includes('-alpha')) {
+          grouped.alpha.push(version);
+        } else if (version.includes('-rc')) {
+          grouped.beta.push(version);
+        } else {
+          grouped.release.push(version);
+        }
+      });
+
+      return {
+        type: 'FORGE',
+        versions: grouped,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch Forge versions');
+    }
+  }
+
+  private async getFabricVersions() {
+    try {
+      const response = await axios.get('https://meta.fabricmc.net/v2/versions/loader');
+      const loaderVersions = response.data || [];
+
+      const grouped = {
+        release: [],
+        beta: [],
+        alpha: [],
+      };
+
+      loaderVersions.forEach((loader: any) => {
+        if (loader.stable) {
+          grouped.release.push(loader.version);
+        } else {
+          grouped.beta.push(loader.version);
+        }
+      });
+
+      return {
+        type: 'FABRIC',
+        versions: grouped,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch Fabric versions');
+    }
+  }
+
+  private async getNeoForgeVersions() {
+    try {
+      const response = await axios.get('https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge');
+      const versions = response.data.versions || [];
+
+      const grouped = {
+        release: [],
+        beta: [],
+        alpha: [],
+      };
+
+      versions.reverse().forEach((version: string) => {
+        if (version.includes('-beta') || version.includes('-alpha')) {
+          grouped.alpha.push(version);
+        } else if (version.includes('-rc')) {
+          grouped.beta.push(version);
+        } else {
+          grouped.release.push(version);
+        }
+      });
+
+      return {
+        type: 'NEOFORGE',
+        versions: grouped,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch NeoForge versions');
+    }
+  }
+
+  private async getPurpurVersions() {
+    try {
+      const response = await axios.get('https://api.purpurmc.org/v2/purpur');
+      const versions = response.data.versions || [];
+
+      const grouped = {
+        release: versions.reverse(),
+        beta: [],
+        alpha: [],
+      };
+
+      return {
+        type: 'PURPUR',
+        versions: grouped,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch Purpur versions');
+    }
+  }
+
+  private async getFoliaVersions() {
+    try {
+      const response = await axios.get('https://api.papermc.io/v2/projects/folia');
+      const versions = response.data.versions || [];
+
+      const grouped = {
+        release: versions.reverse(),
+        beta: [],
+        alpha: [],
+      };
+
+      return {
+        type: 'FOLIA',
+        versions: grouped,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch Folia versions');
+    }
+  }
+
+  private async getSpigotVersions() {
+    try {
+      // Spigot doesn't have an official API, so we'll use vanilla versions
+      // but return them as SPIGOT type
+      const vanillaResult = await this.getVanillaVersions();
+      return {
+        type: 'SPIGOT',
+        versions: vanillaResult.versions,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch Spigot versions');
     }
   }
 }
