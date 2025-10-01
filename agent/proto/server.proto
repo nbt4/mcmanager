@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package minectrl;
+
+service ServerAgent {
+  // Server lifecycle
+  rpc StartServer(StartServerRequest) returns (StartServerResponse);
+  rpc StopServer(StopServerRequest) returns (StopServerResponse);
+  rpc GetServerStatus(GetServerStatusRequest) returns (GetServerStatusResponse);
+
+  // File operations
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+  rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse);
+
+  // Logs
+  rpc GetLogs(GetLogsRequest) returns (stream LogEntry);
+  rpc ExecuteCommand(ExecuteCommandRequest) returns (ExecuteCommandResponse);
+}
+
+// Server lifecycle messages
+message StartServerRequest {
+  string server_jar = 1;
+  repeated string java_opts = 2;
+  map<string, string> properties = 3;
+}
+
+message StartServerResponse {
+  bool success = 1;
+  string message = 2;
+  int32 pid = 3;
+}
+
+message StopServerRequest {
+  bool force = 1;
+  int32 timeout = 2;
+}
+
+message StopServerResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetServerStatusRequest {}
+
+message GetServerStatusResponse {
+  bool running = 1;
+  int32 pid = 2;
+  int64 uptime = 3;
+  double cpu_usage = 4;
+  int64 memory_usage = 5;
+  int32 player_count = 6;
+  repeated string players = 7;
+}
+
+// File operation messages
+message ListFilesRequest {
+  string path = 1;
+}
+
+message ListFilesResponse {
+  repeated FileInfo files = 1;
+}
+
+message FileInfo {
+  string name = 1;
+  string path = 2;
+  bool is_directory = 3;
+  int64 size = 4;
+  int64 modified_time = 5;
+}
+
+message ReadFileRequest {
+  string path = 1;
+  int64 offset = 2;
+  int64 length = 3;
+}
+
+message ReadFileResponse {
+  bytes content = 1;
+  int64 size = 2;
+}
+
+message WriteFileRequest {
+  string path = 1;
+  bytes content = 2;
+  bool append = 3;
+}
+
+message WriteFileResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteFileRequest {
+  string path = 1;
+  bool recursive = 2;
+}
+
+message DeleteFileResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message CreateDirectoryRequest {
+  string path = 1;
+  bool recursive = 2;
+}
+
+message CreateDirectoryResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Log messages
+message GetLogsRequest {
+  int32 tail_lines = 1;
+  bool follow = 2;
+}
+
+message LogEntry {
+  string timestamp = 1;
+  string level = 2;
+  string message = 3;
+  string source = 4;
+}
+
+message ExecuteCommandRequest {
+  string command = 1;
+}
+
+message ExecuteCommandResponse {
+  bool success = 1;
+  string output = 2;
+}

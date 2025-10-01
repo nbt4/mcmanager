@@ -1,0 +1,84 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Server {
+  id                String     @id @default(cuid())
+  name              String     @unique
+  description       String?
+  type              String     @default("VANILLA")
+  version           String
+  port              Int        @unique
+  memory            Int        @default(4096) // MB
+  javaOpts          String?
+  autoStart         Boolean    @default(false)
+  status            String     @default("STOPPED")
+  storageType       String     @default("VOLUME")
+  storagePath       String // volume name or bind path
+  containerName     String?
+  containerId       String?
+  agentUrl          String?
+  seed              String?
+  difficulty        String     @default("NORMAL")
+  gamemode          String     @default("SURVIVAL")
+  pvp               Boolean    @default(true)
+  whitelist         Boolean    @default(false)
+  onlineMode        Boolean    @default(true)
+  maxPlayers        Int        @default(20)
+  motd              String     @default("A Minecraft Server")
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  backups           Backup[]
+  properties        ServerProperty[]
+
+  @@map("servers")
+}
+
+model ServerProperty {
+  id        String @id @default(cuid())
+  serverId  String
+  key       String
+  value     String
+  server    Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, key])
+  @@map("server_properties")
+}
+
+model Backup {
+  id          String     @id @default(cuid())
+  serverId    String
+  name        String
+  description String?
+  size        Int?       // bytes
+  path        String
+  type        String     @default("MANUAL")
+  status      String     @default("PENDING")
+  createdAt   DateTime   @default(now())
+  completedAt DateTime?
+  server      Server     @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@map("backups")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  role      String   @default("USER")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}

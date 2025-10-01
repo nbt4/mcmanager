@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 142 76% 36%;
+    --primary-foreground: 355.7 100% 97.3%;
+    --secondary: 210 40% 98%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 98%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 98%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 142 76% 36%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 142 76% 36%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 142 76% 36%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Minecraft-themed enhancements */
+@layer utilities {
+  .text-minecraft {
+    @apply font-minecraft;
+  }
+
+  .bg-minecraft-grass {
+    background: linear-gradient(45deg, #7CB342, #8BC34A);
+  }
+
+  .bg-minecraft-stone {
+    background: linear-gradient(45deg, #616161, #757575);
+  }
+
+  .glass-effect {
+    @apply bg-white/10 backdrop-blur-md border border-white/20;
+  }
+
+  .dark .glass-effect {
+    @apply bg-black/10 backdrop-blur-md border border-white/10;
+  }
+
+  /* Monaco editor dark theme adjustments */
+  .monaco-editor-dark {
+    --vscode-editor-background: hsl(var(--background));
+    --vscode-editor-foreground: hsl(var(--foreground));
+  }
+
+  /* Custom scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-secondary rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-primary/50 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/70;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-2 border-primary/30 border-t-primary;
+  }
+
+  /* Pixelated image rendering for Minecraft aesthetic */
+  .pixelated {
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* Command palette styles */
+[cmdk-root] {
+  @apply bg-popover text-popover-foreground;
+}
+
+[cmdk-input] {
+  @apply bg-transparent border-none outline-none;
+}
+
+[cmdk-item] {
+  @apply cursor-pointer rounded-sm px-2 py-1.5 text-sm outline-none;
+}
+
+[cmdk-item][data-selected="true"] {
+  @apply bg-accent text-accent-foreground;
+}
+
+/* Log viewer styles */
+.log-viewer {
+  @apply font-mono text-sm;
+}
+
+.log-viewer .log-line {
+  @apply border-b border-border/10 px-2 py-1;
+}
+
+.log-viewer .log-line:hover {
+  @apply bg-muted/50;
+}
+
+.log-viewer .log-timestamp {
+  @apply text-muted-foreground;
+}
+
+.log-viewer .log-level-info {
+  @apply text-blue-500;
+}
+
+.log-viewer .log-level-warn {
+  @apply text-yellow-500;
+}
+
+.log-viewer .log-level-error {
+  @apply text-red-500;
+}
+
+.log-viewer .log-level-debug {
+  @apply text-gray-500;
+}
+
+/* File tree styles */
+.file-tree-item {
+  @apply flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-accent/50 cursor-pointer;
+}
+
+.file-tree-item.selected {
+  @apply bg-accent text-accent-foreground;
+}
+
+.file-tree-folder {
+  @apply text-blue-600 dark:text-blue-400;
+}
+
+.file-tree-file {
+  @apply text-foreground;
+}
+
+/* Status indicators */
+.status-running {
+  @apply text-green-500;
+}
+
+.status-stopped {
+  @apply text-red-500;
+}
+
+.status-starting {
+  @apply text-yellow-500;
+}
+
+.status-error {
+  @apply text-red-600;
+}
