@@ -86,3 +86,12 @@ export function useRestartServer() {
     },
   });
 }
+
+export function useServerLogs(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ['servers', id, 'logs'],
+    queryFn: () => api.servers.getLogs(id),
+    enabled: !!id && enabled,
+    refetchInterval: 2000, // Refetch every 2 seconds for live updates
+  });
+}

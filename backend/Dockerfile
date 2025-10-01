@@ -22,8 +22,8 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine AS production
 
-# Install curl for health checks, OpenSSL for Prisma, and OpenJDK for Minecraft servers
-RUN apk add --no-cache curl openssl openjdk21-jre
+# Install curl for health checks, OpenSSL for Prisma, OpenJDK for Minecraft servers, and util-linux for nsenter
+RUN apk add --no-cache curl openssl openjdk21-jre util-linux
 
 WORKDIR /app
 

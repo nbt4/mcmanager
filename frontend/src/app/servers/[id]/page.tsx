@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useServer, useStartServer, useStopServer, useRestartServer } from '@/hooks/useServers';
+import { useServer, useStartServer, useStopServer, useRestartServer, useServerLogs } from '@/hooks/useServers';
 import { useBackups } from '@/hooks/useBackups';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -17,6 +17,7 @@ export default function ServerDetailPage() {
   const id = params.id as string;
   const { data: server, isLoading } = useServer(id);
   const { data: backups } = useBackups(id);
+  const { data: logsData } = useServerLogs(id, server?.status === 'RUNNING');
   const startServer = useStartServer();
   const stopServer = useStopServer();
   const restartServer = useRestartServer();
@@ -238,12 +239,21 @@ export default function ServerDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Server Console</CardTitle>
-                <CardDescription>View live server logs and execute commands</CardDescription>
+                <CardDescription>View live server logs{server.status === 'RUNNING' && ' (refreshes every 2 seconds)'}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="bg-black text-green-400 font-mono text-sm p-4 rounded h-96 overflow-auto">
-                  <p>[INFO] Server console coming soon...</p>
-                  <p>[INFO] Real-time log streaming will be available here</p>
+                  {logsData && logsData.logs.length > 0 ? (
+                    logsData.logs.map((log, i) => (
+                      <div key={i} className="whitespace-pre-wrap break-all">{log}</div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500">
+                      {server.status === 'RUNNING'
+                        ? 'Waiting for logs...'
+                        : 'Server is not running. Start the server to see logs.'}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

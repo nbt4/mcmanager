@@ -191,6 +191,13 @@ export class ServersService {
     return this.start(id);
   }
 
+  async getLogs(id: string) {
+    await this.findOne(id); // Verify server exists
+    return {
+      logs: this.agentsService.getLogs(id),
+    };
+  }
+
   private async createDefaultProperties(serverId: string, dto: CreateServerDto) {
     const properties = [
       { key: 'server-port', value: dto.port.toString() },

@@ -63,6 +63,7 @@ export const api = {
     restart: (id: string) => fetchApi<Server>(`/servers/${id}/restart`, {
       method: 'POST',
     }),
+    getLogs: (id: string) => fetchApi<{ logs: string[] }>(`/servers/${id}/logs`),
   },
 
   // Backups

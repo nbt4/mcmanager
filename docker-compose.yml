@@ -76,9 +76,12 @@ services:
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
       - NODE_ENV=production
       - SERVERS_BASE_DIR=/data/minecraft
+      - HOST_SERVERS_PATH=${HOST_SERVERS_PATH:-/opt/dev/mcmanager/minecraft-servers}
     volumes:
       - app_data:/app/data
-      - minecraft_data:/data/minecraft
+      - ${MINECRAFT_DATA_DIR:-./minecraft-servers}:/data/minecraft
+    privileged: true
+    pid: host
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s

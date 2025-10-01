@@ -9,10 +9,14 @@ import axios from 'axios';
 export class AgentsService {
   private readonly logger = new Logger(AgentsService.name);
   private processes = new Map<string, ChildProcess>();
+  private logs = new Map<string, string[]>(); // Store last 1000 lines per server
+  private readonly MAX_LOG_LINES = 1000;
   private readonly serversBaseDir = process.env.SERVERS_BASE_DIR || '/data/minecraft';
+  private readonly hostServersPath = process.env.HOST_SERVERS_PATH || '/opt/dev/mcmanager/minecraft-servers';
 
   async startServer(server: Server) {
     const serverDir = path.join(this.serversBaseDir, server.storagePath);
+    const hostServerDir = path.join(this.hostServersPath, server.storagePath);
 
     // Ensure server directory exists
     await fs.mkdir(serverDir, { recursive: true });
@@ -26,37 +30,66 @@ export class AgentsService {
     // Accept EULA
     await fs.writeFile(path.join(serverDir, 'eula.txt'), 'eula=true\n');
 
+    // Convert jar path to host path for Java command
+    const jarName = path.basename(jarPath);
+    const hostJarPath = path.join(hostServerDir, jarName);
+
     // Build Java command
     const javaArgs = [
       `-Xmx${server.memory}M`,
       `-Xms${Math.min(server.memory, 1024)}M`,
       ...(server.javaOpts ? server.javaOpts.split(' ') : []),
       '-jar',
-      jarPath,
+      hostJarPath,
       'nogui',
     ];
 
-    // Spawn server process
-    const serverProcess = spawn('java', javaArgs, {
-      cwd: serverDir,
-      detached: false,
+    // Spawn server process on host using nsenter
+    // nsenter allows executing commands in the host's PID namespace from within a container
+    // We need to cd to the directory first since cwd doesn't work across namespaces
+    const serverProcess = spawn('nsenter', [
+      '--target', '1',
+      '--mount',
+      '--uts',
+      '--ipc',
+      '--net',
+      '--pid',
+      '--',
+      'sh', '-c',
+      `cd "${hostServerDir}" && exec java ${javaArgs.join(' ')}`,
+    ], {
+      detached: true,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     const processId = `${server.id}-${Date.now()}`;
     this.processes.set(server.id, serverProcess);
 
-    // Log output
+    // Initialize log buffer for this server
+    if (!this.logs.has(server.id)) {
+      this.logs.set(server.id, []);
+    }
+
+    // Log output and store in buffer
     serverProcess.stdout.on('data', (data) => {
-      this.logger.log(`[${server.name}] ${data.toString()}`);
+      const lines = data.toString().split('\n').filter(line => line.trim());
+      lines.forEach(line => {
+        this.logger.log(`[${server.name}] ${line}`);
+        this.addLog(server.id, line);
+      });
     });
 
     serverProcess.stderr.on('data', (data) => {
-      this.logger.error(`[${server.name}] ${data.toString()}`);
+      const lines = data.toString().split('\n').filter(line => line.trim());
+      lines.forEach(line => {
+        this.logger.error(`[${server.name}] ${line}`);
+        this.addLog(server.id, `[ERROR] ${line}`);
+      });
     });
 
     serverProcess.on('exit', (code) => {
       this.logger.log(`[${server.name}] Process exited with code ${code}`);
+      this.addLog(server.id, `[INFO] Server process exited with code ${code}`);
       this.processes.delete(server.id);
     });
 
@@ -221,5 +254,22 @@ export class AgentsService {
       path.join(serverDir, 'server.properties'),
       properties.join('\n') + '\n'
     );
+  }
+
+  private addLog(serverId: string, line: string) {
+    const logs = this.logs.get(serverId) || [];
+    const timestamp = new Date().toISOString();
+    logs.push(`[${timestamp}] ${line}`);
+
+    // Keep only last MAX_LOG_LINES
+    if (logs.length > this.MAX_LOG_LINES) {
+      logs.shift();
+    }
+
+    this.logs.set(serverId, logs);
+  }
+
+  getLogs(serverId: string): string[] {
+    return this.logs.get(serverId) || [];
   }
 }

@@ -101,4 +101,13 @@ export class ServersController {
   restart(@Param('id') id: string) {
     return this.serversService.restart(id);
   }
+
+  @Get(':id/logs')
+  @ApiOperation({ summary: 'Get server logs' })
+  @ApiParam({ name: 'id', description: 'Server ID' })
+  @ApiResponse({ status: 200, description: 'Server logs' })
+  @ApiResponse({ status: 404, description: 'Server not found' })
+  async getLogs(@Param('id') id: string) {
+    return this.serversService.getLogs(id);
+  }
 }
