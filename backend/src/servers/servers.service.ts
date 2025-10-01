@@ -129,11 +129,10 @@ export class ServersService {
       // Start container via agent
       const containerInfo = await this.agentsService.startServer(server);
 
-      // Update server with container info
+      // Update server with container info only (status will be updated via WebSocket)
       return this.prisma.server.update({
         where: { id },
         data: {
-          status: ServerStatus.RUNNING,
           containerId: containerInfo.id,
           agentUrl: containerInfo.agentUrl,
         },
@@ -165,11 +164,10 @@ export class ServersService {
       // Stop server process via agent
       await this.agentsService.stopServer(id);
 
-      // Update status to stopped
+      // Clear container info (status will be updated via WebSocket when process exits)
       return this.prisma.server.update({
         where: { id },
         data: {
-          status: ServerStatus.STOPPED,
           containerId: null,
           agentUrl: null,
         },
