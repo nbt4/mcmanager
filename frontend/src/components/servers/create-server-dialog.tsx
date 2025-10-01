@@ -6,9 +6,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateServer } from '@/hooks/useServers';
+import { useVersions } from '@/hooks/useVersions';
+import { Loader2 } from 'lucide-react';
 import type { CreateServerDto } from '@/lib/api-client';
 
 interface CreateServerDialogProps {
@@ -22,7 +24,7 @@ export function CreateServerDialog({ open, onOpenChange }: CreateServerDialogPro
       name: '',
       description: '',
       type: 'PAPER',
-      version: '1.20.4',
+      version: '',
       port: 25565,
       memory: 4096,
       autoStart: false,
@@ -43,6 +45,7 @@ export function CreateServerDialog({ open, onOpenChange }: CreateServerDialogPro
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   const serverType = watch('type');
+  const { data: versions, isLoading: versionsLoading } = useVersions(serverType);
 
   const onSubmit = async (data: CreateServerDto) => {
     try {
@@ -115,11 +118,12 @@ export function CreateServerDialog({ open, onOpenChange }: CreateServerDialogPro
                     <SelectContent>
                       <SelectItem value="VANILLA">Vanilla</SelectItem>
                       <SelectItem value="PAPER">Paper (Recommended)</SelectItem>
-                      <SelectItem value="FABRIC">Fabric</SelectItem>
-                      <SelectItem value="FORGE">Forge</SelectItem>
+                      <SelectItem value="PURPUR">Purpur</SelectItem>
+                      <SelectItem value="FOLIA">Folia</SelectItem>
                       <SelectItem value="SPIGOT">Spigot</SelectItem>
                       <SelectItem value="BUKKIT">Bukkit</SelectItem>
-                      <SelectItem value="QUILT">Quilt</SelectItem>
+                      <SelectItem value="FABRIC">Fabric</SelectItem>
+                      <SelectItem value="FORGE">Forge</SelectItem>
                       <SelectItem value="NEOFORGE">NeoForge</SelectItem>
                     </SelectContent>
                   </Select>
@@ -127,11 +131,53 @@ export function CreateServerDialog({ open, onOpenChange }: CreateServerDialogPro
 
                 <div>
                   <Label htmlFor="version">Minecraft Version *</Label>
-                  <Input
-                    id="version"
-                    {...register('version', { required: true })}
-                    placeholder="1.20.4"
-                  />
+                  {versionsLoading ? (
+                    <div className="flex items-center gap-2 h-10 px-3 py-2 border rounded-md">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm text-muted-foreground">Loading versions...</span>
+                    </div>
+                  ) : (
+                    <Select
+                      value={watch('version')}
+                      onValueChange={(value) => setValue('version', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select version" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(versions?.versions.release?.length ?? 0) > 0 && (
+                          <SelectGroup>
+                            <SelectLabel>Release Versions</SelectLabel>
+                            {versions?.versions.release?.map((version) => (
+                              <SelectItem key={version} value={version}>
+                                {version}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                        {(versions?.versions.beta?.length ?? 0) > 0 && (
+                          <SelectGroup>
+                            <SelectLabel>Beta / Snapshot Versions</SelectLabel>
+                            {versions?.versions.beta?.map((version) => (
+                              <SelectItem key={version} value={version}>
+                                {version}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                        {(versions?.versions.alpha?.length ?? 0) > 0 && (
+                          <SelectGroup>
+                            <SelectLabel>Alpha / Old Versions</SelectLabel>
+                            {versions?.versions.alpha?.map((version) => (
+                              <SelectItem key={version} value={version}>
+                                {version}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
 
