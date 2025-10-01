@@ -3,12 +3,18 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import multipart from '@fastify/multipart';
 
 async function bootstrap() {
+  const fastifyAdapter = new FastifyAdapter({ logger: true });
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true }),
+    fastifyAdapter,
   );
+
+  // Register multipart plugin for file uploads
+  await app.register(multipart as any);
 
   // Global validation pipe
   app.useGlobalPipes(

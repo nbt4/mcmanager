@@ -8,7 +8,12 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
+  Res,
+  StreamableFile,
+  Req,
 } from '@nestjs/common';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import {
   ApiTags,
   ApiOperation,
@@ -109,5 +114,99 @@ export class ServersController {
   @ApiResponse({ status: 404, description: 'Server not found' })
   async getLogs(@Param('id') id: string) {
     return this.serversService.getLogs(id);
+  }
+
+  @Get(':id/files')
+  @ApiOperation({ summary: 'List files in server directory' })
+  @ApiParam({ name: 'id', description: 'Server ID' })
+  @ApiResponse({ status: 200, description: 'List of files and directories' })
+  async listFiles(
+    @Param('id') id: string,
+    @Query('path') path?: string,
+  ) {
+    return this.serversService.listFiles(id, path || '');
+  }
+
+  @Get(':id/files/read')
+  @ApiOperation({ summary: 'Read file content' })
+  @ApiParam({ name: 'id', description: 'Server ID' })
+  @ApiResponse({ status: 200, description: 'File content' })
+  async readFile(
+    @Param('id') id: string,
+    @Query('path') path: string,
+  ) {
+    return this.serversService.readFile(id, path);
+  }
+
+  @Get(':id/files/download')
+  @ApiOperation({ summary: 'Download file' })
+  @ApiParam({ name: 'id', description: 'Server ID' })
+  @ApiResponse({ status: 200, description: 'File download' })
+  async downloadFile(
+    @Param('id') id: string,
+    @Query('path') path: string,
+    @Res() res: FastifyReply,
+  ) {
+    const file = await this.serversService.downloadFile(id, path);
+    res.header('Content-Type', 'application/octet-stream');
+    res.header('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.send(file.buffer);
+  }
+
+  @Post(':id/files/write')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Write file content' })
+  @ApiParam({ name: 'id', description: 'Server ID' })
+  @ApiResponse({ status: 200, description: 'File written successfully' })
+  async writeFile(
+    @Param('id') id: string,
+    @Body() body: { path: string; content: string },
+  ) {
+    return this.serversService.writeFile(id, body.path, body.content);
+  }
+
+  @Post(':id/files/upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Upload file' })
+  @ApiParam({ name: 'id', description: 'Server ID' })
+  @ApiResponse({ status: 200, description: 'File uploaded successfully' })
+  async uploadFile(
+    @Param('id') id: string,
+    @Query('path') path: string,
+    @Req() req: FastifyRequest,
+  ) {
+    const data = await req.file();
+    if (!data) {
+      throw new Error('No file uploaded');
+    }
+
+    const buffer = await data.toBuffer();
+    return this.serversService.uploadFile(id, path, {
+      buffer,
+      originalname: data.filename,
+    });
+  }
+
+  @Post(':id/files/mkdir')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Create directory' })
+  @ApiParam({ name: 'id', description: 'Server ID' })
+  @ApiResponse({ status: 200, description: 'Directory created successfully' })
+  async createDirectory(
+    @Param('id') id: string,
+    @Body() body: { path: string },
+  ) {
+    return this.serversService.createDirectory(id, body.path);
+  }
+
+  @Delete(':id/files')
+  @ApiOperation({ summary: 'Delete file or directory' })
+  @ApiParam({ name: 'id', description: 'Server ID' })
+  @ApiResponse({ status: 200, description: 'File/directory deleted successfully' })
+  async deleteFile(
+    @Param('id') id: string,
+    @Query('path') path: string,
+  ) {
+    return this.serversService.deleteFile(id, path);
   }
 }

@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { FileManager } from '@/components/file-manager';
 
 export default function ServerDetailPage() {
   const params = useParams();
@@ -361,7 +362,7 @@ export default function ServerDetailPage() {
                 <CardDescription>Browse and edit server files</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">File manager coming soon...</p>
+                <FileManager serverId={id} />
               </CardContent>
             </Card>
           </TabsContent>

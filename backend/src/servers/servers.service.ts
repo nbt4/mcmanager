@@ -1,12 +1,16 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentsService } from '../agents/agents.service';
 import { CreateServerDto } from './dto/create-server.dto';
 import { UpdateServerDto } from './dto/update-server.dto';
 import { ServerStatus } from '../common/enums';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 @Injectable()
 export class ServersService {
+  private readonly serversBaseDir = process.env.SERVERS_BASE_DIR || '/data/minecraft';
+
   constructor(
     private prisma: PrismaService,
     private agentsService: AgentsService,
@@ -235,5 +239,168 @@ export class ServersService {
         value: prop.value,
       })),
     });
+  }
+
+  private async getServerPath(serverId: string): Promise<string> {
+    const server = await this.findOne(serverId);
+    return path.join(this.serversBaseDir, server.storagePath);
+  }
+
+  private validatePath(requestedPath: string): void {
+    // Prevent directory traversal attacks
+    if (requestedPath.includes('..') || requestedPath.startsWith('/')) {
+      throw new BadRequestException('Invalid path');
+    }
+  }
+
+  async listFiles(serverId: string, relativePath: string) {
+    this.validatePath(relativePath);
+    const serverPath = await this.getServerPath(serverId);
+    const fullPath = path.join(serverPath, relativePath);
+
+    try {
+      const entries = await fs.readdir(fullPath, { withFileTypes: true });
+      const items = await Promise.all(
+        entries.map(async (entry) => {
+          const itemPath = path.join(fullPath, entry.name);
+          const stats = await fs.stat(itemPath);
+          return {
+            name: entry.name,
+            isDirectory: entry.isDirectory(),
+            size: stats.size,
+            modifiedAt: stats.mtime,
+            path: path.join(relativePath, entry.name),
+          };
+        }),
+      );
+
+      return {
+        path: relativePath,
+        items: items.sort((a, b) => {
+          // Directories first, then alphabetically
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          return a.name.localeCompare(b.name);
+        }),
+      };
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new NotFoundException('Directory not found');
+      }
+      throw error;
+    }
+  }
+
+  async readFile(serverId: string, relativePath: string) {
+    this.validatePath(relativePath);
+    const serverPath = await this.getServerPath(serverId);
+    const fullPath = path.join(serverPath, relativePath);
+
+    try {
+      const stats = await fs.stat(fullPath);
+      if (stats.isDirectory()) {
+        throw new BadRequestException('Cannot read a directory');
+      }
+
+      const content = await fs.readFile(fullPath, 'utf-8');
+      return {
+        path: relativePath,
+        content,
+        size: stats.size,
+        modifiedAt: stats.mtime,
+      };
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new NotFoundException('File not found');
+      }
+      throw error;
+    }
+  }
+
+  async downloadFile(serverId: string, relativePath: string) {
+    this.validatePath(relativePath);
+    const serverPath = await this.getServerPath(serverId);
+    const fullPath = path.join(serverPath, relativePath);
+
+    try {
+      const buffer = await fs.readFile(fullPath);
+      return {
+        buffer,
+        filename: path.basename(fullPath),
+      };
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new NotFoundException('File not found');
+      }
+      throw error;
+    }
+  }
+
+  async writeFile(serverId: string, relativePath: string, content: string) {
+    this.validatePath(relativePath);
+    const serverPath = await this.getServerPath(serverId);
+    const fullPath = path.join(serverPath, relativePath);
+
+    try {
+      // Ensure parent directory exists
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      await fs.writeFile(fullPath, content, 'utf-8');
+      return { success: true, path: relativePath };
+    } catch (error) {
+      throw new BadRequestException(`Failed to write file: ${error.message}`);
+    }
+  }
+
+  async uploadFile(serverId: string, relativePath: string, file: any) {
+    this.validatePath(relativePath);
+    const serverPath = await this.getServerPath(serverId);
+    const fullPath = path.join(serverPath, relativePath, file.originalname);
+
+    try {
+      // Ensure directory exists
+      await fs.mkdir(path.join(serverPath, relativePath), { recursive: true });
+      await fs.writeFile(fullPath, file.buffer);
+      return {
+        success: true,
+        path: path.join(relativePath, file.originalname),
+        filename: file.originalname,
+      };
+    } catch (error) {
+      throw new BadRequestException(`Failed to upload file: ${error.message}`);
+    }
+  }
+
+  async createDirectory(serverId: string, relativePath: string) {
+    this.validatePath(relativePath);
+    const serverPath = await this.getServerPath(serverId);
+    const fullPath = path.join(serverPath, relativePath);
+
+    try {
+      await fs.mkdir(fullPath, { recursive: true });
+      return { success: true, path: relativePath };
+    } catch (error) {
+      throw new BadRequestException(`Failed to create directory: ${error.message}`);
+    }
+  }
+
+  async deleteFile(serverId: string, relativePath: string) {
+    this.validatePath(relativePath);
+    const serverPath = await this.getServerPath(serverId);
+    const fullPath = path.join(serverPath, relativePath);
+
+    try {
+      const stats = await fs.stat(fullPath);
+      if (stats.isDirectory()) {
+        await fs.rm(fullPath, { recursive: true, force: true });
+      } else {
+        await fs.unlink(fullPath);
+      }
+      return { success: true, path: relativePath };
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new NotFoundException('File or directory not found');
+      }
+      throw new BadRequestException(`Failed to delete: ${error.message}`);
+    }
   }
 }
