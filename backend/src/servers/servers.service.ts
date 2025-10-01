@@ -6,6 +6,7 @@ import { UpdateServerDto } from './dto/update-server.dto';
 import { ServerStatus } from '../common/enums';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import axios from 'axios';
 
 @Injectable()
 export class ServersService {
@@ -401,6 +402,84 @@ export class ServersService {
         throw new NotFoundException('File or directory not found');
       }
       throw new BadRequestException(`Failed to delete: ${error.message}`);
+    }
+  }
+
+  async getAvailableVersions(type: string) {
+    const serverType = type.toUpperCase();
+
+    if (serverType === 'PAPER') {
+      return this.getPaperVersions();
+    } else if (serverType === 'VANILLA') {
+      return this.getVanillaVersions();
+    } else if (serverType === 'SPIGOT' || serverType === 'BUKKIT') {
+      return this.getVanillaVersions();
+    } else if (serverType === 'FORGE' || serverType === 'FABRIC') {
+      return this.getVanillaVersions();
+    }
+
+    throw new BadRequestException(`Unsupported server type: ${type}`);
+  }
+
+  private async getPaperVersions() {
+    try {
+      const response = await axios.get('https://api.papermc.io/v2/projects/paper');
+      const versions = response.data.versions || [];
+
+      const grouped = {
+        release: [],
+        beta: [],
+        alpha: [],
+      };
+
+      versions.reverse().forEach((version: string) => {
+        if (version.includes('pre') || version.includes('rc')) {
+          grouped.beta.push(version);
+        } else if (version.includes('snapshot') || version.includes('alpha')) {
+          grouped.alpha.push(version);
+        } else {
+          grouped.release.push(version);
+        }
+      });
+
+      return {
+        type: 'PAPER',
+        versions: grouped,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch Paper versions');
+    }
+  }
+
+  private async getVanillaVersions() {
+    try {
+      const response = await axios.get('https://launchermeta.mojang.com/mc/game/version_manifest.json');
+      const versions = response.data.versions || [];
+
+      const grouped = {
+        release: [],
+        beta: [],
+        alpha: [],
+      };
+
+      versions.forEach((version: any) => {
+        const versionId = version.id;
+
+        if (version.type === 'release') {
+          grouped.release.push(versionId);
+        } else if (version.type === 'snapshot') {
+          grouped.beta.push(versionId);
+        } else if (version.type === 'old_beta' || version.type === 'old_alpha') {
+          grouped.alpha.push(versionId);
+        }
+      });
+
+      return {
+        type: 'VANILLA',
+        versions: grouped,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch Vanilla versions');
     }
   }
 }

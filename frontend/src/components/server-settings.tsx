@@ -12,10 +12,13 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useUpdateServer } from '@/hooks/useServers';
-import { Save } from 'lucide-react';
+import { useVersions } from '@/hooks/useVersions';
+import { Save, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface ServerSettingsProps {
@@ -26,6 +29,7 @@ export function ServerSettings({ server }: ServerSettingsProps) {
   const [isSaving, setIsSaving] = useState(false);
   const updateServer = useUpdateServer();
   const queryClient = useQueryClient();
+  const { data: versions, isLoading: versionsLoading } = useVersions(server.type);
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
     defaultValues: {
@@ -80,10 +84,53 @@ export function ServerSettings({ server }: ServerSettingsProps) {
 
           <div className="space-y-2">
             <Label htmlFor="version">Minecraft Version</Label>
-            <Input
-              id="version"
-              {...register('version', { required: 'Version is required' })}
-            />
+            {versionsLoading ? (
+              <div className="flex items-center gap-2 h-10 px-3 py-2 border rounded-md">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm text-muted-foreground">Loading versions...</span>
+              </div>
+            ) : (
+              <Select
+                value={watch('version')}
+                onValueChange={(value) => setValue('version', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select version" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(versions?.versions.release?.length ?? 0) > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Release Versions</SelectLabel>
+                      {versions?.versions.release?.map((version) => (
+                        <SelectItem key={version} value={version}>
+                          {version}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {(versions?.versions.beta?.length ?? 0) > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Beta / Snapshot Versions</SelectLabel>
+                      {versions?.versions.beta?.map((version) => (
+                        <SelectItem key={version} value={version}>
+                          {version}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {(versions?.versions.alpha?.length ?? 0) > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Alpha / Old Versions</SelectLabel>
+                      {versions?.versions.alpha?.map((version) => (
+                        <SelectItem key={version} value={version}>
+                          {version}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
+            )}
             {errors.version && (
               <p className="text-sm text-red-500">{errors.version.message as string}</p>
             )}

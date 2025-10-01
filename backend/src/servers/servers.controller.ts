@@ -47,6 +47,14 @@ export class ServersController {
     return this.serversService.findAll();
   }
 
+  @Get('versions/:type')
+  @ApiOperation({ summary: 'Get available Minecraft versions for server type' })
+  @ApiParam({ name: 'type', description: 'Server type (VANILLA, PAPER, etc.)' })
+  @ApiResponse({ status: 200, description: 'List of available versions grouped by type' })
+  async getVersions(@Param('type') type: string) {
+    return this.serversService.getAvailableVersions(type);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get server by ID' })
   @ApiParam({ name: 'id', description: 'Server ID' })
