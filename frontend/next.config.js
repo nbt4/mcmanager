@@ -4,6 +4,15 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: [],
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'media.forgecdn.net',
+        pathname: '/**',
+      },
+    ],
+  },
   async rewrites() {
     return [
       {
