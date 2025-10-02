@@ -33,19 +33,42 @@ export class AgentsService {
     // Accept EULA
     await fs.writeFile(path.join(serverDir, 'eula.txt'), 'eula=true\n');
 
-    // Convert jar path to host path for Java command
-    const jarName = path.basename(jarPath);
-    const hostJarPath = path.join(hostServerDir, jarName);
+    // Check if we're using a run script (Forge/NeoForge)
+    const useRunScript = jarPath.endsWith('.sh') || jarPath.endsWith('.bat');
 
-    // Build Java command
-    const javaArgs = [
-      `-Xmx${server.memory}M`,
-      `-Xms${Math.min(server.memory, 1024)}M`,
-      ...(server.javaOpts ? server.javaOpts.split(' ') : []),
-      '-jar',
-      hostJarPath,
-      'nogui',
-    ];
+    let command: string;
+    if (useRunScript) {
+      // For Forge/NeoForge, use the run script
+      const scriptName = path.basename(jarPath);
+      const userJvmArgs = [
+        `-Xmx${server.memory}M`,
+        `-Xms${Math.min(server.memory, 1024)}M`,
+        ...(server.javaOpts ? server.javaOpts.split(' ') : []),
+      ].join(' ');
+
+      // Write custom JVM args to user_jvm_args.txt
+      await fs.writeFile(
+        path.join(serverDir, 'user_jvm_args.txt'),
+        userJvmArgs
+      );
+
+      command = `cd "${hostServerDir}" && exec sh ${scriptName} nogui`;
+    } else {
+      // Traditional JAR-based server
+      const jarName = path.basename(jarPath);
+      const hostJarPath = path.join(hostServerDir, jarName);
+
+      const javaArgs = [
+        `-Xmx${server.memory}M`,
+        `-Xms${Math.min(server.memory, 1024)}M`,
+        ...(server.javaOpts ? server.javaOpts.split(' ') : []),
+        '-jar',
+        hostJarPath,
+        'nogui',
+      ];
+
+      command = `cd "${hostServerDir}" && exec java ${javaArgs.join(' ')}`;
+    }
 
     // Spawn server process on host using nsenter
     // nsenter allows executing commands in the host's PID namespace from within a container
@@ -59,7 +82,7 @@ export class AgentsService {
       '--pid',
       '--',
       'sh', '-c',
-      `cd "${hostServerDir}" && exec java ${javaArgs.join(' ')}`,
+      command,
     ], {
       detached: true,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -258,17 +281,13 @@ export class AgentsService {
     const type = server.type.toUpperCase();
     const version = server.version;
 
-    // Check if server JAR already exists
-    const existingJars = await fs.readdir(serverDir).catch(() => []);
-    const existingForgeJar = existingJars.find(file =>
-      file.endsWith('.jar') &&
-      !file.includes('installer') &&
-      (file.includes('forge') || file.includes('neoforge'))
-    );
+    // Check if server is already installed (look for run.sh)
+    const existingFiles = await fs.readdir(serverDir).catch(() => []);
+    const hasRunScript = existingFiles.includes('run.sh') || existingFiles.includes('run.bat');
 
-    if (existingForgeJar) {
-      this.logger.log(`Found existing ${type} server JAR: ${existingForgeJar}`);
-      return path.join(serverDir, existingForgeJar);
+    if (hasRunScript) {
+      this.logger.log(`Found existing ${type} server installation`);
+      return path.join(serverDir, 'run.sh');
     }
 
     this.logger.log(`Installing ${type} server ${version}...`);
@@ -299,8 +318,20 @@ export class AgentsService {
       throw new Error(`Failed to install ${type} server`);
     }
 
-    // Find the generated server JAR
+    // Check for run script (modern Forge/NeoForge)
     const files = await fs.readdir(serverDir);
+    if (files.includes('run.sh')) {
+      // Make run.sh executable
+      await fs.chmod(path.join(serverDir, 'run.sh'), 0o755);
+
+      // Clean up installer
+      await fs.unlink(installerPath).catch(() => {});
+
+      this.logger.log(`${type} server installed with run script`);
+      return path.join(serverDir, 'run.sh');
+    }
+
+    // Fallback: look for traditional JAR (older Forge versions)
     const serverJar = files.find(file =>
       file.endsWith('.jar') &&
       !file.includes('installer') &&
@@ -308,7 +339,8 @@ export class AgentsService {
     );
 
     if (!serverJar) {
-      throw new Error(`${type} server JAR not found after installation`);
+      this.logger.error(`Files in directory: ${files.join(', ')}`);
+      throw new Error(`${type} server installation incomplete - no run script or JAR found`);
     }
 
     // Clean up installer
