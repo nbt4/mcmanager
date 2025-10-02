@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   Dialog,
@@ -38,6 +38,14 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
   const { data: modListFromLatest, isLoading: modListFromLatestLoading } = useModListFromLatest(modpack?.id);
   const { data: modListFromFile, isLoading: modListFromFileLoading } = useModList(modpack?.id, selectedFileId);
   const createServer = useCreateModpackServer();
+
+  // Auto-select the latest file when files are loaded
+  useEffect(() => {
+    if (filesData?.data && filesData.data.length > 0 && !selectedFileId) {
+      // Files are sorted by date (newest first)
+      setSelectedFileId(filesData.data[0].id);
+    }
+  }, [filesData, selectedFileId]);
 
   // Use mod list from selected file if available, otherwise use latest
   const modListData = selectedFileId ? modListFromFile : modListFromLatest;
