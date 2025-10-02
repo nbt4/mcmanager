@@ -1,10 +1,12 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurseForgeService } from './curseforge.service';
+import { ModpacksGateway } from './modpacks.gateway';
 import { CreateModpackServerDto } from './dto/create-modpack-server.dto';
 import * as AdmZip from 'adm-zip';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class ModpacksService {
@@ -14,6 +16,7 @@ export class ModpacksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly curseforge: CurseForgeService,
+    private readonly gateway: ModpacksGateway,
   ) {
     this.ensureTempDir();
   }
@@ -85,10 +88,18 @@ export class ModpacksService {
   }
 
   async createServerFromModpack(dto: CreateModpackServerDto) {
-    this.logger.log(`Creating server from modpack ${dto.modpackId}, file ${dto.fileId}`);
+    const sessionId = uuidv4();
+    this.logger.log(`Creating server from modpack ${dto.modpackId}, file ${dto.fileId} (session: ${sessionId})`);
 
     try {
       // 1. Get file details from CurseForge
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'fetching',
+        progress: 5,
+        message: 'Fetching modpack information...',
+      });
+
       const fileDetails = await this.curseforge.getFileDetails(dto.modpackId, dto.fileId);
 
       if (!fileDetails.data || !fileDetails.data.downloadUrl) {
@@ -96,10 +107,24 @@ export class ModpacksService {
       }
 
       // 2. Download modpack file
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'downloading',
+        progress: 15,
+        message: 'Downloading modpack file...',
+      });
+
       this.logger.log(`Downloading modpack from ${fileDetails.data.downloadUrl}`);
       const modpackBuffer = await this.curseforge.downloadModpackFile(fileDetails.data.downloadUrl);
 
       // 3. Extract and parse manifest
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'extracting',
+        progress: 35,
+        message: 'Extracting modpack files...',
+      });
+
       const tempPath = path.join(this.tempDir, `modpack-${Date.now()}`);
       await fs.mkdir(tempPath, { recursive: true });
 
@@ -107,6 +132,13 @@ export class ModpacksService {
       zip.extractAllTo(tempPath, true);
 
       // 4. Read and parse manifest
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'parsing',
+        progress: 45,
+        message: 'Reading modpack configuration...',
+      });
+
       const manifestPath = path.join(tempPath, 'manifest.json');
       const manifestData = await fs.readFile(manifestPath, 'utf-8');
       const manifest = await this.curseforge.parseManifest(manifestData);
@@ -114,6 +146,13 @@ export class ModpacksService {
       this.logger.log(`Parsed manifest: ${manifest.name} v${manifest.version}, MC ${manifest.minecraftVersion}, Loader: ${manifest.modloaderType}`);
 
       // 5. Save modpack info to database
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'database',
+        progress: 55,
+        message: 'Saving modpack information...',
+      });
+
       const modpack = await this.prisma.modpack.upsert({
         where: { curseId: dto.modpackId },
         create: {
@@ -153,9 +192,23 @@ export class ModpacksService {
       const storagePath = dto.storagePath || `modpack-${dto.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
 
       // 8. Find available port
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'port',
+        progress: 70,
+        message: 'Finding available port...',
+      });
+
       const availablePort = await this.findAvailablePort(dto.port || 25565);
 
       // 9. Create server record
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'creating',
+        progress: 80,
+        message: 'Creating server...',
+      });
+
       const server = await this.prisma.server.create({
         data: {
           name: dto.name,
@@ -178,16 +231,34 @@ export class ModpacksService {
       });
 
       // 10. Copy modpack files to server directory
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'copying',
+        progress: 90,
+        message: 'Copying modpack files...',
+      });
+
       await this.copyModpackFiles(tempPath, storagePath, manifest.overrides);
 
       // 11. Cleanup temp directory
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'cleanup',
+        progress: 95,
+        message: 'Finishing up...',
+      });
+
       await fs.rm(tempPath, { recursive: true, force: true });
 
       this.logger.log(`Successfully created server ${server.id} from modpack ${modpack.name}`);
 
-      return server;
+      // Emit completion
+      this.gateway.emitComplete(sessionId, server.id);
+
+      return { ...server, sessionId };
     } catch (error) {
       this.logger.error(`Failed to create server from modpack: ${error.message}`, error.stack);
+      this.gateway.emitError(sessionId, error.message);
       throw new BadRequestException(`Failed to create server from modpack: ${error.message}`);
     }
   }

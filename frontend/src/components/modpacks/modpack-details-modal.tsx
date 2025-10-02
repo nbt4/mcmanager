@@ -19,6 +19,7 @@ import { useModpackDetails, useModpackFiles, useModpackDescription, useModList, 
 import { Download, Calendar, Users, Loader2, Server, Search, ExternalLink, Package2 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { ServerCreationProgress } from './server-creation-progress';
 
 interface ModpackDetailsModalProps {
   modpack: any;
@@ -31,6 +32,8 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [modSearchQuery, setModSearchQuery] = useState('');
+  const [creationSessionId, setCreationSessionId] = useState<string | null>(null);
+  const [showProgress, setShowProgress] = useState(false);
 
   const { data: details, isLoading: detailsLoading } = useModpackDetails(modpack?.id);
   const { data: filesData, isLoading: filesLoading } = useModpackFiles(modpack?.id);
@@ -65,13 +68,22 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
     if (!modpack || !selectedFileId) return;
 
     try {
-      await createServer.mutateAsync({
+      const result = await createServer.mutateAsync({
         ...data,
         modpackId: modpack.id,
         fileId: selectedFileId,
       });
-      onOpenChange(false);
-      router.push('/servers');
+
+      // Show progress dialog with session ID
+      if (result.sessionId) {
+        setCreationSessionId(result.sessionId);
+        setShowProgress(true);
+        setShowCreateForm(false); // Hide the create form
+      } else {
+        // Fallback if no session ID (shouldn't happen)
+        onOpenChange(false);
+        router.push('/servers');
+      }
     } catch (error) {
       console.error('Failed to create server:', error);
     }
@@ -107,6 +119,7 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
   ) || [];
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -495,5 +508,11 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
         )}
       </DialogContent>
     </Dialog>
+    <ServerCreationProgress
+      sessionId={creationSessionId}
+      open={showProgress}
+      onOpenChange={setShowProgress}
+    />
+  </>
   );
 }
