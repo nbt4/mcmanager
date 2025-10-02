@@ -130,6 +130,19 @@ export class CurseForgeService {
     }
   }
 
+  async getModsByIds(modIds: number[]) {
+    try {
+      // CurseForge API supports batch lookup with POST /v1/mods
+      const response = await this.axiosInstance.post('/v1/mods', {
+        modIds: modIds,
+      });
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Failed to get mods by IDs: ${error.message}`);
+      throw new BadRequestException('Failed to fetch mod details');
+    }
+  }
+
   async downloadModpackFile(downloadUrl: string): Promise<Buffer> {
     try {
       const response = await axios.get(downloadUrl, {
@@ -170,13 +183,52 @@ export class CurseForgeService {
       const manifestData = manifestEntry.getData().toString('utf8');
       const manifest = JSON.parse(manifestData);
 
+      const modFiles = manifest.files || [];
+
+      // Extract unique project IDs
+      const projectIds: number[] = Array.from(
+        new Set(modFiles.map((mod: any) => Number(mod.projectID)))
+      );
+
+      this.logger.log(`Fetching details for ${projectIds.length} mods`);
+
+      // Fetch mod details in batches (CurseForge has a limit of 100 per request)
+      const batchSize = 100;
+      const modDetails: any[] = [];
+
+      for (let i = 0; i < projectIds.length; i += batchSize) {
+        const batch: number[] = projectIds.slice(i, i + batchSize);
+        const response = await this.getModsByIds(batch);
+        if (response.data) {
+          modDetails.push(...response.data);
+        }
+      }
+
+      // Create a map of projectID -> mod details
+      const modDetailsMap = new Map(modDetails.map(mod => [mod.id, mod]));
+
+      // Enrich mod files with names and details
+      const enrichedMods = modFiles.map((mod: any) => {
+        const details = modDetailsMap.get(mod.projectID);
+        return {
+          projectID: mod.projectID,
+          fileID: mod.fileID,
+          required: mod.required,
+          name: details?.name || `Unknown Mod (${mod.projectID})`,
+          slug: details?.slug || '',
+          summary: details?.summary || '',
+          logo: details?.logo?.url || null,
+          websiteUrl: details?.links?.websiteUrl || null,
+        };
+      });
+
       return {
         modpackName: manifest.name || 'Unknown',
         version: manifest.version || '1.0.0',
         minecraftVersion: manifest.minecraft?.version || 'Unknown',
         modLoader: manifest.minecraft?.modLoaders?.[0]?.id || 'Unknown',
-        mods: manifest.files || [],
-        modCount: manifest.files?.length || 0,
+        mods: enrichedMods,
+        modCount: enrichedMods.length,
       };
     } catch (error) {
       this.logger.error(`Failed to get mod list: ${error.message}`);

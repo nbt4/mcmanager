@@ -87,6 +87,8 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
   // Filter mods based on search query
   const filteredMods = modListData?.mods?.filter((mod: any) =>
     !modSearchQuery ||
+    mod.name?.toLowerCase().includes(modSearchQuery.toLowerCase()) ||
+    mod.summary?.toLowerCase().includes(modSearchQuery.toLowerCase()) ||
     mod.projectID?.toString().includes(modSearchQuery.toLowerCase()) ||
     mod.fileID?.toString().includes(modSearchQuery.toLowerCase())
   ) || [];
@@ -270,29 +272,66 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search mods by ID..."
+                      placeholder="Search mods by name, ID, or description..."
                       value={modSearchQuery}
                       onChange={(e) => setModSearchQuery(e.target.value)}
                       className="pl-10"
                     />
                   </div>
 
-                  <div className="space-y-1 max-h-96 overflow-y-auto">
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
                     {filteredMods.map((mod: any, idx: number) => (
                       <div
                         key={idx}
-                        className="p-2 border rounded text-sm hover:bg-muted/50 transition-colors"
+                        className="p-3 border rounded hover:bg-muted/50 transition-colors"
                       >
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <Package2 className="h-3 w-3 text-muted-foreground" />
-                            <span className="font-mono text-xs">
-                              Project: {mod.projectID} • File: {mod.fileID}
-                            </span>
-                          </div>
-                          {mod.required !== false && (
-                            <span className="text-xs text-green-600 dark:text-green-400">Required</span>
+                        <div className="flex items-start gap-3">
+                          {mod.logo ? (
+                            <div className="relative w-8 h-8 flex-shrink-0">
+                              <Image
+                                src={mod.logo}
+                                alt={mod.name}
+                                fill
+                                className="object-cover rounded"
+                              />
+                            </div>
+                          ) : (
+                            <Package2 className="h-8 w-8 text-muted-foreground flex-shrink-0" />
                           )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  {mod.websiteUrl ? (
+                                    <a
+                                      href={mod.websiteUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="font-medium text-sm hover:underline inline-flex items-center gap-1"
+                                    >
+                                      {mod.name}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  ) : (
+                                    <span className="font-medium text-sm">{mod.name}</span>
+                                  )}
+                                </div>
+                                {mod.summary && (
+                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                    {mod.summary}
+                                  </p>
+                                )}
+                                <p className="text-xs text-muted-foreground mt-1 font-mono">
+                                  ID: {mod.projectID} • File: {mod.fileID}
+                                </p>
+                              </div>
+                              {mod.required !== false && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 whitespace-nowrap">
+                                  Required
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
