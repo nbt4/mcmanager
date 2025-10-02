@@ -94,23 +94,14 @@ export default function ModpacksPage() {
         </Card>
 
         {/* Search Results */}
-        {!searchQuery ? (
-          <Card>
-            <CardContent className="py-12">
-              <div className="text-center">
-                <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">
-                  Enter a search query to find modpacks
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : isLoading ? (
+        {isLoading ? (
           <Card>
             <CardContent className="py-12">
               <div className="text-center">
                 <Loader2 className="h-12 w-12 mx-auto text-muted-foreground mb-4 animate-spin" />
-                <p className="text-muted-foreground">Searching modpacks...</p>
+                <p className="text-muted-foreground">
+                  {searchQuery ? 'Searching modpacks...' : 'Loading popular modpacks...'}
+                </p>
               </div>
             </CardContent>
           </Card>
