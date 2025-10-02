@@ -43,6 +43,10 @@ RUN chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Install sharp for image optimization in standalone mode
+# Note: sharp must be installed after copying standalone files
+RUN npm install sharp
+
 USER nextjs
 
 EXPOSE 3000
