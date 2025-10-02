@@ -26,6 +26,25 @@ export class ModpacksService {
     }
   }
 
+  private async findAvailablePort(requestedPort: number = 25565): Promise<number> {
+    // Get all occupied ports
+    const existingServers = await this.prisma.server.findMany({
+      select: { port: true },
+      orderBy: { port: 'asc' },
+    });
+
+    const occupiedPorts = new Set(existingServers.map(s => s.port));
+
+    // Find the next available port starting from the requested port
+    let port = requestedPort;
+    while (occupiedPorts.has(port)) {
+      port++;
+    }
+
+    this.logger.log(`Requested port ${requestedPort}, assigned port ${port}`);
+    return port;
+  }
+
   async searchModpacks(query?: string, gameVersion?: string, page: number = 0) {
     return this.curseforge.searchModpacks(query, gameVersion, page);
   }
@@ -133,14 +152,17 @@ export class ModpacksService {
       // 7. Generate storage path
       const storagePath = dto.storagePath || `modpack-${dto.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
 
-      // 8. Create server record
+      // 8. Find available port
+      const availablePort = await this.findAvailablePort(dto.port || 25565);
+
+      // 9. Create server record
       const server = await this.prisma.server.create({
         data: {
           name: dto.name,
           description: dto.description || `${manifest.name} modpack server`,
           type: serverType,
           version: version,
-          port: dto.port,
+          port: availablePort,
           memory: dto.memory,
           javaOpts: dto.javaOpts || '',
           autoStart: false,
@@ -155,10 +177,10 @@ export class ModpacksService {
         },
       });
 
-      // 9. Copy modpack files to server directory
+      // 10. Copy modpack files to server directory
       await this.copyModpackFiles(tempPath, storagePath, manifest.overrides);
 
-      // 10. Cleanup temp directory
+      // 11. Cleanup temp directory
       await fs.rm(tempPath, { recursive: true, force: true });
 
       this.logger.log(`Successfully created server ${server.id} from modpack ${modpack.name}`);
