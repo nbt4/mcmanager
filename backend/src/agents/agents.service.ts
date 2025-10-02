@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Server } from '@prisma/client';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import axios from 'axios';
@@ -167,6 +167,11 @@ export class AgentsService {
   }
 
   private async ensureServerJar(server: Server, serverDir: string): Promise<string> {
+    // For Forge/NeoForge, use installer approach
+    if (server.type.toUpperCase() === 'FORGE' || server.type.toUpperCase() === 'NEOFORGE') {
+      return this.installForgeServer(server, serverDir);
+    }
+
     const jarName = this.getJarName(server.type);
     const jarPath = path.join(serverDir, jarName);
 
@@ -202,14 +207,15 @@ export class AgentsService {
       case 'PAPER':
         return this.getPaperDownloadUrl(version);
       case 'SPIGOT':
+        return this.getSpigotDownloadUrl(version);
       case 'BUKKIT':
-        // Note: Spigot requires BuildTools, this is a simplified placeholder
-        throw new Error('Spigot/Bukkit requires BuildTools. Please use Paper or Vanilla.');
+        return this.getSpigotDownloadUrl(version); // Spigot includes Bukkit API
       case 'FABRIC':
         return `https://meta.fabricmc.net/v2/versions/loader/${version}/latest/latest/server/jar`;
       case 'FORGE':
       case 'NEOFORGE':
-        throw new Error('Forge/NeoForge download requires installer. Not yet implemented.');
+        // These use installers, handled separately
+        throw new Error('Forge/NeoForge use installers, should not call getDownloadUrl directly');
       default:
         return this.getVanillaDownloadUrl(version);
     }
@@ -240,6 +246,92 @@ export class AgentsService {
     // Get version details
     const versionResponse = await axios.get(versionData.url);
     return versionResponse.data.downloads.server.url;
+  }
+
+  private async getSpigotDownloadUrl(version: string): Promise<string> {
+    // Use GetBukkit API (community-maintained mirror)
+    // Format: https://download.getbukkit.org/spigot/spigot-{version}.jar
+    return `https://download.getbukkit.org/spigot/spigot-${version}.jar`;
+  }
+
+  private async installForgeServer(server: Server, serverDir: string): Promise<string> {
+    const type = server.type.toUpperCase();
+    const version = server.version;
+
+    // Check if server JAR already exists
+    const existingJars = await fs.readdir(serverDir).catch(() => []);
+    const existingForgeJar = existingJars.find(file =>
+      file.endsWith('.jar') &&
+      !file.includes('installer') &&
+      (file.includes('forge') || file.includes('neoforge'))
+    );
+
+    if (existingForgeJar) {
+      this.logger.log(`Found existing ${type} server JAR: ${existingForgeJar}`);
+      return path.join(serverDir, existingForgeJar);
+    }
+
+    this.logger.log(`Installing ${type} server ${version}...`);
+
+    // Download installer
+    const installerUrl = type === 'FORGE'
+      ? await this.getForgeInstallerUrl(version)
+      : await this.getNeoForgeInstallerUrl(version);
+
+    const installerPath = path.join(serverDir, 'installer.jar');
+
+    this.logger.log(`Downloading ${type} installer from ${installerUrl}`);
+    const response = await axios.get(installerUrl, {
+      responseType: 'arraybuffer',
+      maxRedirects: 5,
+    });
+    await fs.writeFile(installerPath, response.data);
+
+    // Run installer
+    this.logger.log(`Running ${type} installer...`);
+    try {
+      execSync(`java -jar ${installerPath} --installServer`, {
+        cwd: serverDir,
+        stdio: 'pipe',
+      });
+    } catch (error) {
+      this.logger.error(`Installer execution failed: ${error.message}`);
+      throw new Error(`Failed to install ${type} server`);
+    }
+
+    // Find the generated server JAR
+    const files = await fs.readdir(serverDir);
+    const serverJar = files.find(file =>
+      file.endsWith('.jar') &&
+      !file.includes('installer') &&
+      (file.includes('forge') || file.includes('neoforge') || file.startsWith('minecraft_server'))
+    );
+
+    if (!serverJar) {
+      throw new Error(`${type} server JAR not found after installation`);
+    }
+
+    // Clean up installer
+    await fs.unlink(installerPath).catch(() => {});
+
+    this.logger.log(`${type} server installed: ${serverJar}`);
+    return path.join(serverDir, serverJar);
+  }
+
+  private async getForgeInstallerUrl(version: string): Promise<string> {
+    // version format: 1.20.1-47.2.0 (minecraft-forge)
+    const [mcVersion, forgeVersion] = version.split('-');
+
+    // Try to get from official Forge maven
+    // Format: https://maven.minecraftforge.net/net/minecraftforge/forge/{version}/forge-{version}-installer.jar
+    const fullVersion = `${mcVersion}-${forgeVersion}`;
+    return `https://maven.minecraftforge.net/net/minecraftforge/forge/${fullVersion}/forge-${fullVersion}-installer.jar`;
+  }
+
+  private async getNeoForgeInstallerUrl(version: string): Promise<string> {
+    // version format could be just the neoforge version like "20.4.237" or "21.0.167"
+    // NeoForge maven: https://maven.neoforged.net/releases/net/neoforged/neoforge/{version}/neoforge-{version}-installer.jar
+    return `https://maven.neoforged.net/releases/net/neoforged/neoforge/${version}/neoforge-${version}-installer.jar`;
   }
 
   private getJarName(type: string): string {
