@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { useServers, useStartServer, useStopServer, useRestartServer, useDeleteServer } from '@/hooks/useServers';
 import { CreateServerDialog } from '@/components/servers/create-server-dialog';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function ServersPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -118,7 +119,17 @@ export default function ServersPage() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <CardTitle className="flex items-center gap-2">
-                          <ServerIcon className="h-5 w-5 text-primary" />
+                          {server.logoUrl ? (
+                            <Image
+                              src={server.logoUrl}
+                              alt={`${server.name} logo`}
+                              width={20}
+                              height={20}
+                              className="rounded"
+                            />
+                          ) : (
+                            <ServerIcon className="h-5 w-5 text-primary" />
+                          )}
                           {server.name}
                         </CardTitle>
                         <CardDescription className="mt-2">

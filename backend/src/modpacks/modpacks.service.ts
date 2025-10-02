@@ -91,8 +91,21 @@ export class ModpacksService {
     const sessionId = uuidv4();
     this.logger.log(`Creating server from modpack ${dto.modpackId}, file ${dto.fileId} (session: ${sessionId})`);
 
+    // Start the creation process in the background
+    this.performServerCreation(sessionId, dto).catch((error) => {
+      this.logger.error(`Background server creation failed: ${error.message}`);
+    });
+
+    // Return immediately with sessionId so frontend can connect to WebSocket
+    return { sessionId };
+  }
+
+  private async performServerCreation(sessionId: string, dto: CreateModpackServerDto) {
     try {
-      // 1. Get file details from CurseForge
+      // Small delay to let frontend connect to WebSocket
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 1. Get file details and modpack info from CurseForge
       this.gateway.emitProgress({
         sessionId,
         step: 'fetching',
@@ -100,7 +113,10 @@ export class ModpacksService {
         message: 'Fetching modpack information...',
       });
 
-      const fileDetails = await this.curseforge.getFileDetails(dto.modpackId, dto.fileId);
+      const [fileDetails, modpackDetails] = await Promise.all([
+        this.curseforge.getFileDetails(dto.modpackId, dto.fileId),
+        this.curseforge.getModpackDetails(dto.modpackId),
+      ]);
 
       if (!fileDetails.data || !fileDetails.data.downloadUrl) {
         throw new BadRequestException('No download URL available for this modpack file');
@@ -153,6 +169,8 @@ export class ModpacksService {
         message: 'Saving modpack information...',
       });
 
+      const logoUrl = modpackDetails.data?.logo?.url || null;
+
       const modpack = await this.prisma.modpack.upsert({
         where: { curseId: dto.modpackId },
         create: {
@@ -163,12 +181,14 @@ export class ModpacksService {
           gameVersion: manifest.minecraftVersion,
           modloader: manifest.modloaderType,
           downloadUrl: fileDetails.data.downloadUrl,
+          iconUrl: logoUrl,
         },
         update: {
           name: manifest.name,
           gameVersion: manifest.minecraftVersion,
           modloader: manifest.modloaderType,
           downloadUrl: fileDetails.data.downloadUrl,
+          iconUrl: logoUrl,
         },
       });
 
@@ -224,6 +244,7 @@ export class ModpacksService {
           storagePath: storagePath,
           containerName: `minectrl-${storagePath}`,
           modpackId: modpack.id,
+          logoUrl: logoUrl,
         },
         include: {
           modpack: true,
@@ -254,12 +275,9 @@ export class ModpacksService {
 
       // Emit completion
       this.gateway.emitComplete(sessionId, server.id);
-
-      return { ...server, sessionId };
     } catch (error) {
       this.logger.error(`Failed to create server from modpack: ${error.message}`, error.stack);
       this.gateway.emitError(sessionId, error.message);
-      throw new BadRequestException(`Failed to create server from modpack: ${error.message}`);
     }
   }
 

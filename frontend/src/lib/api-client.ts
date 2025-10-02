@@ -109,6 +109,8 @@ export interface Server {
   onlineMode: boolean;
   maxPlayers: number;
   motd: string;
+  modpackId: string | null;
+  logoUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }

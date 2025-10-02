@@ -53,28 +53,22 @@ export class ModpacksGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   emitProgress(progress: ModpackProgress) {
-    const clients = this.sessions.get(progress.sessionId);
-    if (clients && clients.size > 0) {
-      this.server.emit('progress', progress);
-      this.logger.log(`Emitted progress for session ${progress.sessionId}: ${progress.message} (${progress.progress}%)`);
-    }
+    // Emit to all clients - they'll filter by sessionId on the frontend
+    this.server.emit('progress', progress);
+    this.logger.log(`Emitted progress for session ${progress.sessionId}: ${progress.message} (${progress.progress}%)`);
   }
 
   emitComplete(sessionId: string, serverId: string) {
-    const clients = this.sessions.get(sessionId);
-    if (clients && clients.size > 0) {
-      this.server.emit('complete', { sessionId, serverId });
-      this.logger.log(`Emitted completion for session ${sessionId}`);
-    }
+    // Emit to all clients
+    this.server.emit('complete', { sessionId, serverId });
+    this.logger.log(`Emitted completion for session ${sessionId}`);
     this.sessions.delete(sessionId);
   }
 
   emitError(sessionId: string, error: string) {
-    const clients = this.sessions.get(sessionId);
-    if (clients && clients.size > 0) {
-      this.server.emit('error', { sessionId, error });
-      this.logger.log(`Emitted error for session ${sessionId}: ${error}`);
-    }
+    // Emit to all clients
+    this.server.emit('error', { sessionId, error });
+    this.logger.log(`Emitted error for session ${sessionId}: ${error}`);
     this.sessions.delete(sessionId);
   }
 }
