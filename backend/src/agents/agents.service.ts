@@ -24,8 +24,8 @@ export class AgentsService {
     // Ensure server directory exists
     await fs.mkdir(serverDir, { recursive: true });
 
-    // Download server JAR if not exists
-    const jarPath = await this.ensureServerJar(server, serverDir);
+    // Get server executable (script or JAR)
+    const executable = await this.ensureServerJar(server, serverDir);
 
     // Create/update server.properties
     await this.createServerProperties(server, serverDir);
@@ -33,29 +33,27 @@ export class AgentsService {
     // Accept EULA
     await fs.writeFile(path.join(serverDir, 'eula.txt'), 'eula=true\n');
 
-    // Check if we're using a run script (Forge/NeoForge)
-    const useRunScript = jarPath.endsWith('.sh') || jarPath.endsWith('.bat');
-
     let command: string;
-    if (useRunScript) {
-      // For Forge/NeoForge, use the run script
-      const scriptName = path.basename(jarPath);
+    if (executable.type === 'script') {
+      // Use the detected start script
+      const scriptName = path.basename(executable.path);
       const userJvmArgs = [
         `-Xmx${server.memory}M`,
         `-Xms${Math.min(server.memory, 1024)}M`,
         ...(server.javaOpts ? server.javaOpts.split(' ') : []),
       ].join(' ');
 
-      // Write custom JVM args to user_jvm_args.txt
+      // Write custom JVM args to user_jvm_args.txt for Forge/NeoForge scripts
       await fs.writeFile(
         path.join(serverDir, 'user_jvm_args.txt'),
         userJvmArgs
       );
 
+      this.logger.log(`Starting server with script: ${scriptName}`);
       command = `cd "${hostServerDir}" && exec sh ${scriptName} nogui`;
     } else {
       // Traditional JAR-based server
-      const jarName = path.basename(jarPath);
+      const jarName = path.basename(executable.path);
       const hostJarPath = path.join(hostServerDir, jarName);
 
       const javaArgs = [
@@ -67,6 +65,7 @@ export class AgentsService {
         'nogui',
       ];
 
+      this.logger.log(`Starting server with JAR: ${jarName}`);
       command = `cd "${hostServerDir}" && exec java ${javaArgs.join(' ')}`;
     }
 
@@ -189,12 +188,12 @@ export class AgentsService {
     return '';
   }
 
-  private async ensureServerJar(server: Server, serverDir: string): Promise<string> {
+  private async ensureServerJar(server: Server, serverDir: string): Promise<{ path: string; type: 'script' | 'jar' }> {
     // First, check if server is already set up
     const existingExecutable = await this.detectServerExecutable(serverDir);
     if (existingExecutable) {
       this.logger.log(`Found existing server executable: ${existingExecutable.type} - ${path.basename(existingExecutable.path)}`);
-      return existingExecutable.path;
+      return existingExecutable;
     }
 
     // For Forge/NeoForge, use installer approach
@@ -203,7 +202,7 @@ export class AgentsService {
       // Re-detect after installation
       const installed = await this.detectServerExecutable(serverDir);
       if (installed) {
-        return installed.path;
+        return installed;
       }
       throw new Error(`Failed to detect executable after ${server.type} installation`);
     }
@@ -213,11 +212,11 @@ export class AgentsService {
 
     try {
       await fs.access(jarPath);
-      return jarPath;
+      return { path: jarPath, type: 'jar' };
     } catch {
       // JAR doesn't exist, download it
       await this.downloadServerJar(server, jarPath);
-      return jarPath;
+      return { path: jarPath, type: 'jar' };
     }
   }
 
