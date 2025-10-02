@@ -14,14 +14,14 @@ import { ModpackDetailsModal } from '@/components/modpacks/modpack-details-modal
 
 export default function ModpacksPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [gameVersion, setGameVersion] = useState<string>('');
+  const [gameVersion, setGameVersion] = useState<string>('all');
   const [page, setPage] = useState(0);
   const [selectedModpack, setSelectedModpack] = useState<any>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const { data: searchResults, isLoading } = useSearchModpacks({
     query: searchQuery,
-    gameVersion: gameVersion || undefined,
+    gameVersion: gameVersion === 'all' ? undefined : gameVersion,
     page,
   });
 
@@ -81,7 +81,7 @@ export default function ModpacksPage() {
                   <SelectValue placeholder="All versions" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All versions</SelectItem>
+                  <SelectItem value="all">All versions</SelectItem>
                   {minecraftVersions.map(v => (
                     <SelectItem key={v} value={v}>{v}</SelectItem>
                   ))}
