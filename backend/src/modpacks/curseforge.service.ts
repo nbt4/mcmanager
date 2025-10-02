@@ -160,6 +160,33 @@ export class CurseForgeService {
   }
 
   /**
+   * Download a single mod file
+   */
+  async downloadModFile(modId: number, fileId: number): Promise<{ buffer: Buffer; fileName: string }> {
+    try {
+      const fileDetails = await this.getFileDetails(modId, fileId);
+
+      if (!fileDetails.data || !fileDetails.data.downloadUrl) {
+        throw new Error(`No download URL available for mod ${modId}, file ${fileId}`);
+      }
+
+      const response = await axios.get(fileDetails.data.downloadUrl, {
+        responseType: 'arraybuffer',
+        timeout: 120000, // 2 minutes per mod
+        maxContentLength: 100 * 1024 * 1024, // 100MB max per mod
+      });
+
+      return {
+        buffer: Buffer.from(response.data),
+        fileName: fileDetails.data.fileName || `mod-${modId}-${fileId}.jar`,
+      };
+    } catch (error) {
+      this.logger.warn(`Failed to download mod ${modId} file ${fileId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Get latest file for a modpack
    */
   async getLatestFile(modpackId: number) {

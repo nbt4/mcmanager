@@ -215,7 +215,7 @@ export class ModpacksService {
       this.gateway.emitProgress({
         sessionId,
         step: 'port',
-        progress: 70,
+        progress: 48,
         message: 'Finding available port...',
       });
 
@@ -225,7 +225,7 @@ export class ModpacksService {
       this.gateway.emitProgress({
         sessionId,
         step: 'creating',
-        progress: 80,
+        progress: 50,
         message: 'Creating server...',
       });
 
@@ -255,13 +255,23 @@ export class ModpacksService {
       this.gateway.emitProgress({
         sessionId,
         step: 'copying',
-        progress: 90,
-        message: 'Copying modpack files...',
+        progress: 55,
+        message: 'Copying modpack configuration files...',
       });
 
       await this.copyModpackFiles(tempPath, storagePath, manifest.overrides);
 
-      // 11. Cleanup temp directory
+      // 11. Download mods from CurseForge
+      this.gateway.emitProgress({
+        sessionId,
+        step: 'downloading-mods',
+        progress: 60,
+        message: `Downloading ${manifest.mods.length} mods from CurseForge...`,
+      });
+
+      await this.downloadMods(sessionId, manifest.mods, storagePath);
+
+      // 12. Cleanup temp directory
       this.gateway.emitProgress({
         sessionId,
         step: 'cleanup',
@@ -321,6 +331,65 @@ export class ModpacksService {
     } catch (error) {
       this.logger.error(`Failed to copy modpack files: ${error.message}`);
       throw new BadRequestException('Failed to copy modpack files to server directory');
+    }
+  }
+
+  private async downloadMods(sessionId: string, mods: any[], storagePath: string) {
+    const serverDataDir = process.env.SERVERS_BASE_DIR || '/data/minecraft';
+    const modsDir = path.join(serverDataDir, storagePath, 'mods');
+
+    // Create mods directory
+    await fs.mkdir(modsDir, { recursive: true });
+
+    const totalMods = mods.length;
+    let downloadedMods = 0;
+    let failedMods = 0;
+
+    this.logger.log(`Starting download of ${totalMods} mods for ${storagePath}`);
+
+    // Download mods in batches of 5 to avoid overwhelming the API
+    const batchSize = 5;
+    for (let i = 0; i < mods.length; i += batchSize) {
+      const batch = mods.slice(i, Math.min(i + batchSize, mods.length));
+
+      await Promise.allSettled(
+        batch.map(async (mod) => {
+          try {
+            const { buffer, fileName } = await this.curseforge.downloadModFile(
+              mod.projectID,
+              mod.fileID
+            );
+
+            const modPath = path.join(modsDir, fileName);
+            await fs.writeFile(modPath, buffer);
+
+            downloadedMods++;
+            this.logger.log(`Downloaded mod ${downloadedMods}/${totalMods}: ${fileName}`);
+
+            // Emit progress update
+            const progress = 70 + Math.floor((downloadedMods / totalMods) * 20); // 70-90%
+            this.gateway.emitProgress({
+              sessionId,
+              step: 'downloading-mods',
+              progress,
+              message: `Downloading mods (${downloadedMods}/${totalMods})...`,
+              current: downloadedMods,
+              total: totalMods,
+            });
+          } catch (error) {
+            failedMods++;
+            this.logger.warn(`Failed to download mod ${mod.projectID}/${mod.fileID}: ${error.message}`);
+          }
+        })
+      );
+    }
+
+    this.logger.log(
+      `Mod download complete: ${downloadedMods} successful, ${failedMods} failed out of ${totalMods} total`
+    );
+
+    if (downloadedMods === 0) {
+      throw new BadRequestException('Failed to download any mods from the modpack');
     }
   }
 
