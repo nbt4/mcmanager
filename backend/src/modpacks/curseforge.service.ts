@@ -38,17 +38,21 @@ export class CurseForgeService {
     });
   }
 
-  async searchModpacks(query: string, gameVersion?: string, page: number = 0) {
+  async searchModpacks(query?: string, gameVersion?: string, page: number = 0) {
     try {
       const params: CurseForgeSearchParams = {
         gameId: this.MINECRAFT_GAME_ID,
         classId: this.MODPACK_CLASS_ID,
-        searchFilter: query,
         sortField: 2, // Popularity
         sortOrder: 'desc',
         pageSize: 20,
         index: page * 20,
       };
+
+      // Only add search filter if query is provided
+      if (query && query.trim()) {
+        params.searchFilter = query;
+      }
 
       if (gameVersion) {
         params.gameVersion = gameVersion;

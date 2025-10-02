@@ -26,7 +26,7 @@ export class ModpacksService {
     }
   }
 
-  async searchModpacks(query: string, gameVersion?: string, page: number = 0) {
+  async searchModpacks(query?: string, gameVersion?: string, page: number = 0) {
     return this.curseforge.searchModpacks(query, gameVersion, page);
   }
 

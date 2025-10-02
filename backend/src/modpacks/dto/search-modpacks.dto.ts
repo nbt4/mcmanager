@@ -2,8 +2,9 @@ import { IsOptional, IsString, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class SearchModpacksDto {
+  @IsOptional()
   @IsString()
-  query: string;
+  query?: string;
 
   @IsOptional()
   @IsString()

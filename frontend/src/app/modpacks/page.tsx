@@ -63,7 +63,9 @@ export default function ModpacksPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Search Modpacks</CardTitle>
-            <CardDescription>Find your favorite modpack to create a server</CardDescription>
+            <CardDescription>
+              {searchQuery ? `Showing results for "${searchQuery}"` : 'Showing popular modpacks - search to find more'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-4">
