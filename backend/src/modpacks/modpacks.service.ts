@@ -341,20 +341,36 @@ export class ModpacksService {
     // Create mods directory
     await fs.mkdir(modsDir, { recursive: true });
 
-    const totalMods = mods.length;
-    let downloadedMods = 0;
-    let failedMods = 0;
+    // Track downloaded mods to avoid duplicates (key: "projectID-fileID")
+    const downloadedSet = new Set<string>();
+    const downloadQueue: Array<{ projectID: number; fileID: number }> = [...mods];
 
-    this.logger.log(`Starting download of ${totalMods} mods for ${storagePath}`);
+    let downloadedCount = 0;
+    let failedCount = 0;
+    const initialModCount = mods.length;
+
+    this.logger.log(`Starting download of ${initialModCount} mods (+ dependencies) for ${storagePath}`);
 
     // Download mods in batches of 5 to avoid overwhelming the API
     const batchSize = 5;
-    for (let i = 0; i < mods.length; i += batchSize) {
-      const batch = mods.slice(i, Math.min(i + batchSize, mods.length));
+
+    while (downloadQueue.length > 0) {
+      const batch = downloadQueue.splice(0, Math.min(batchSize, downloadQueue.length));
 
       await Promise.allSettled(
         batch.map(async (mod) => {
+          const modKey = `${mod.projectID}-${mod.fileID}`;
+
+          // Skip if already downloaded
+          if (downloadedSet.has(modKey)) {
+            return;
+          }
+
           try {
+            // Get file details to check for dependencies
+            const fileDetails = await this.curseforge.getFileDetails(mod.projectID, mod.fileID);
+
+            // Download the mod file
             const { buffer, fileName } = await this.curseforge.downloadModFile(
               mod.projectID,
               mod.fileID
@@ -363,32 +379,50 @@ export class ModpacksService {
             const modPath = path.join(modsDir, fileName);
             await fs.writeFile(modPath, buffer);
 
-            downloadedMods++;
-            this.logger.log(`Downloaded mod ${downloadedMods}/${totalMods}: ${fileName}`);
+            downloadedSet.add(modKey);
+            downloadedCount++;
+
+            this.logger.log(`Downloaded mod ${downloadedCount}: ${fileName}`);
+
+            // Check for required dependencies
+            if (fileDetails.data?.dependencies) {
+              for (const dep of fileDetails.data.dependencies) {
+                // Only download REQUIRED dependencies (type 3)
+                if (dep.relationType === 3) {
+                  const depKey = `${dep.modId}-${dep.fileId}`;
+
+                  if (!downloadedSet.has(depKey) && dep.fileId) {
+                    this.logger.log(`Found required dependency: ${dep.modId}`);
+                    downloadQueue.push({ projectID: dep.modId, fileID: dep.fileId });
+                  }
+                }
+              }
+            }
 
             // Emit progress update
-            const progress = 70 + Math.floor((downloadedMods / totalMods) * 20); // 70-90%
+            const progress = 70 + Math.floor((downloadedCount / (initialModCount + 10)) * 20); // 70-90%
             this.gateway.emitProgress({
               sessionId,
               step: 'downloading-mods',
               progress,
-              message: `Downloading mods (${downloadedMods}/${totalMods})...`,
-              current: downloadedMods,
-              total: totalMods,
+              message: `Downloading mods (${downloadedCount})...`,
+              current: downloadedCount,
+              total: downloadedSet.size + downloadQueue.length,
             });
           } catch (error) {
-            failedMods++;
+            failedCount++;
             this.logger.warn(`Failed to download mod ${mod.projectID}/${mod.fileID}: ${error.message}`);
+            downloadedSet.add(modKey); // Mark as processed to avoid retry loops
           }
         })
       );
     }
 
     this.logger.log(
-      `Mod download complete: ${downloadedMods} successful, ${failedMods} failed out of ${totalMods} total`
+      `Mod download complete: ${downloadedCount} successful, ${failedCount} failed`
     );
 
-    if (downloadedMods === 0) {
+    if (downloadedCount === 0) {
       throw new BadRequestException('Failed to download any mods from the modpack');
     }
   }
