@@ -20,6 +20,8 @@ export class CurseForgeService {
   private readonly MINECRAFT_GAME_ID = 432;
   private readonly MODPACK_CLASS_ID = 4471;
   private readonly baseURL = 'https://api.curseforge.com';
+  private readonly modListCache = new Map<string, { data: any; timestamp: number }>();
+  private readonly CACHE_TTL = 1000 * 60 * 30; // 30 minutes
 
   constructor() {
     const apiKey = process.env.CURSEFORGE_API_KEY;
@@ -148,6 +150,7 @@ export class CurseForgeService {
       const response = await axios.get(downloadUrl, {
         responseType: 'arraybuffer',
         timeout: 300000, // 5 minutes for large files
+        maxContentLength: 500 * 1024 * 1024, // 500MB max
       });
       return Buffer.from(response.data);
     } catch (error) {
@@ -157,9 +160,54 @@ export class CurseForgeService {
   }
 
   /**
+   * Get latest file for a modpack
+   */
+  async getLatestFile(modpackId: number) {
+    try {
+      const filesResponse = await this.getModpackFiles(modpackId);
+
+      if (!filesResponse.data || filesResponse.data.length === 0) {
+        throw new BadRequestException('No files found for this modpack');
+      }
+
+      // Files are usually sorted by date, but let's ensure we get the latest
+      const sortedFiles = filesResponse.data.sort((a: any, b: any) => {
+        return new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime();
+      });
+
+      return sortedFiles[0];
+    } catch (error) {
+      this.logger.error(`Failed to get latest file: ${error.message}`);
+      throw new BadRequestException('Failed to get latest modpack file');
+    }
+  }
+
+  /**
+   * Get mod list from the latest modpack file
+   */
+  async getModListFromLatestFile(modpackId: number) {
+    try {
+      const latestFile = await this.getLatestFile(modpackId);
+      return this.getModListFromFile(modpackId, latestFile.id);
+    } catch (error) {
+      this.logger.error(`Failed to get mod list from latest file: ${error.message}`);
+      throw new BadRequestException('Failed to get mod list from latest file');
+    }
+  }
+
+  /**
    * Get mod list from a modpack file by downloading and parsing manifest
    */
   async getModListFromFile(modpackId: number, fileId: number) {
+    const cacheKey = `modlist:${modpackId}:${fileId}`;
+
+    // Check cache first
+    const cached = this.modListCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      this.logger.log(`Returning cached mod list for ${modpackId}:${fileId}`);
+      return cached.data;
+    }
+
     try {
       const fileDetails = await this.getFileDetails(modpackId, fileId);
 
@@ -222,7 +270,7 @@ export class CurseForgeService {
         };
       });
 
-      return {
+      const result = {
         modpackName: manifest.name || 'Unknown',
         version: manifest.version || '1.0.0',
         minecraftVersion: manifest.minecraft?.version || 'Unknown',
@@ -230,6 +278,16 @@ export class CurseForgeService {
         mods: enrichedMods,
         modCount: enrichedMods.length,
       };
+
+      // Cache the result
+      this.modListCache.set(cacheKey, {
+        data: result,
+        timestamp: Date.now(),
+      });
+
+      this.logger.log(`Cached mod list for ${modpackId}:${fileId} (${enrichedMods.length} mods)`);
+
+      return result;
     } catch (error) {
       this.logger.error(`Failed to get mod list: ${error.message}`);
       throw new BadRequestException(`Failed to get mod list: ${error.message}`);

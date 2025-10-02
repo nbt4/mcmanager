@@ -70,8 +70,16 @@ export class ModpacksController {
     return this.modpacksService.getFileChangelog(parseInt(modpackId), parseInt(fileId));
   }
 
+  @Get(':modpackId/mods')
+  @ApiOperation({ summary: 'Get mod list from latest modpack file' })
+  @ApiParam({ name: 'modpackId', description: 'CurseForge modpack ID' })
+  @ApiResponse({ status: 200, description: 'List of mods in the latest modpack version' })
+  async getModListFromLatest(@Param('modpackId') modpackId: string) {
+    return this.modpacksService.getModListFromLatest(parseInt(modpackId));
+  }
+
   @Get(':modpackId/files/:fileId/mods')
-  @ApiOperation({ summary: 'Get mod list from modpack file' })
+  @ApiOperation({ summary: 'Get mod list from specific modpack file' })
   @ApiParam({ name: 'modpackId', description: 'CurseForge modpack ID' })
   @ApiParam({ name: 'fileId', description: 'CurseForge file ID' })
   @ApiResponse({ status: 200, description: 'List of mods in the modpack' })

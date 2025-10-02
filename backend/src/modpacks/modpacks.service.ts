@@ -61,6 +61,10 @@ export class ModpacksService {
     return this.curseforge.getModListFromFile(modpackId, fileId);
   }
 
+  async getModListFromLatest(modpackId: number) {
+    return this.curseforge.getModListFromLatestFile(modpackId);
+  }
+
   async createServerFromModpack(dto: CreateModpackServerDto) {
     this.logger.log(`Creating server from modpack ${dto.modpackId}, file ${dto.fileId}`);
 

@@ -91,6 +91,18 @@ export function useModList(modpackId: number | null, fileId: number | null) {
   });
 }
 
+export function useModListFromLatest(modpackId: number | null) {
+  return useQuery({
+    queryKey: ['modpacks', modpackId, 'mods', 'latest'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/modpacks/${modpackId}/mods`);
+      return data;
+    },
+    enabled: !!modpackId,
+    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+  });
+}
+
 export function useCreateModpackServer() {
   const queryClient = useQueryClient();
 

@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useModpackDetails, useModpackFiles, useModpackDescription, useModList, useCreateModpackServer } from '@/hooks/useModpacks';
+import { useModpackDetails, useModpackFiles, useModpackDescription, useModList, useModListFromLatest, useCreateModpackServer } from '@/hooks/useModpacks';
 import { Download, Calendar, Users, Loader2, Server, Search, ExternalLink, Package2 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -35,8 +35,13 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
   const { data: details, isLoading: detailsLoading } = useModpackDetails(modpack?.id);
   const { data: filesData, isLoading: filesLoading } = useModpackFiles(modpack?.id);
   const { data: descriptionData, isLoading: descriptionLoading } = useModpackDescription(modpack?.id);
-  const { data: modListData, isLoading: modListLoading } = useModList(modpack?.id, selectedFileId);
+  const { data: modListFromLatest, isLoading: modListFromLatestLoading } = useModListFromLatest(modpack?.id);
+  const { data: modListFromFile, isLoading: modListFromFileLoading } = useModList(modpack?.id, selectedFileId);
   const createServer = useCreateModpackServer();
+
+  // Use mod list from selected file if available, otherwise use latest
+  const modListData = selectedFileId ? modListFromFile : modListFromLatest;
+  const modListLoading = selectedFileId ? modListFromFileLoading : modListFromLatestLoading;
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
     defaultValues: {
@@ -247,14 +252,7 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
             </TabsContent>
 
             <TabsContent value="mods" className="space-y-4">
-              {!selectedFileId ? (
-                <div className="text-center py-8">
-                  <Package2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    Select a modpack version in the Files tab to view the mod list
-                  </p>
-                </div>
-              ) : modListLoading ? (
+              {modListLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin" />
                   <p className="text-sm text-muted-foreground ml-2">Loading mod list...</p>
@@ -265,6 +263,9 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
                     <div>
                       <p className="text-sm font-medium">
                         {modListData.modCount} mods • MC {modListData.minecraftVersion} • {modListData.modLoader}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {selectedFileId ? 'Showing mods from selected version' : 'Showing mods from latest version'}
                       </p>
                     </div>
                   </div>
