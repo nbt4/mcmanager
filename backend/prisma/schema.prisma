@@ -34,9 +34,11 @@ model Server {
   onlineMode        Boolean    @default(true)
   maxPlayers        Int        @default(20)
   motd              String     @default("A Minecraft Server")
+  modpackId         String?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
+  modpack           Modpack?   @relation(fields: [modpackId], references: [id])
   backups           Backup[]
   properties        ServerProperty[]
 
@@ -81,4 +83,23 @@ model User {
   updatedAt DateTime @updatedAt
 
   @@map("users")
+}
+
+model Modpack {
+  id          String   @id @default(cuid())
+  curseId     Int      @unique
+  name        String
+  description String?
+  authors     String   // JSON array stored as string
+  gameVersion String
+  modloader   String   // "FORGE", "FABRIC", "NEOFORGE", "unknown"
+  downloadUrl String
+  iconUrl     String?
+  websiteUrl  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  servers     Server[]
+
+  @@map("modpacks")
 }

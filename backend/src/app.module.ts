@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ServersModule } from './servers/servers.module';
 import { AgentsModule } from './agents/agents.module';
 import { BackupsModule } from './backups/backups.module';
+import { ModpacksModule } from './modpacks/modpacks.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -22,6 +23,7 @@ import { HealthController } from './health/health.controller';
     ServersModule,
     AgentsModule,
     BackupsModule,
+    ModpacksModule,
   ],
   controllers: [HealthController],
 })

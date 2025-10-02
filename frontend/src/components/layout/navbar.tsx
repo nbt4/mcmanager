@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 const navigation = [
   { name: 'Home', href: '/' },
   { name: 'Servers', href: '/servers' },
+  { name: 'Modpacks', href: '/modpacks' },
   { name: 'Backups', href: '/backups' },
   { name: 'Files', href: '/files' },
   { name: 'Logs', href: '/logs' },

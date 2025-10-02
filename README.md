@@ -172,6 +172,9 @@ MINECRAFT_DATA_PATH="/data/minecraft"
 BACKUP_RETENTION_DAYS=7
 BACKUP_CRON="0 4 * * *"
 
+# CurseForge Integration
+CURSEFORGE_API_KEY="your-curseforge-api-key"  # Required for modpack features
+
 # Optional: S3 Backup Storage
 S3_BUCKET=""
 S3_REGION=""

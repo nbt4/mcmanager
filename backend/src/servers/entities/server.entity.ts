@@ -72,6 +72,9 @@ export class ServerEntity implements Server {
   @ApiProperty()
   motd: string;
 
+  @ApiProperty({ nullable: true })
+  modpackId: string | null;
+
   @ApiProperty()
   createdAt: Date;
 

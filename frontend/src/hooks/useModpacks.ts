@@ -1,0 +1,83 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+interface ModpackSearchParams {
+  query: string;
+  gameVersion?: string;
+  page?: number;
+}
+
+interface CreateModpackServerDto {
+  name: string;
+  description?: string;
+  modpackId: number;
+  fileId: number;
+  port: number;
+  memory: number;
+  javaOpts?: string;
+  storagePath?: string;
+}
+
+export function useSearchModpacks(params: ModpackSearchParams) {
+  return useQuery({
+    queryKey: ['modpacks', 'search', params],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/modpacks/search`, {
+        params,
+      });
+      return data;
+    },
+    enabled: !!params.query,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+}
+
+export function useModpackDetails(modpackId: number | null) {
+  return useQuery({
+    queryKey: ['modpacks', modpackId],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/modpacks/${modpackId}`);
+      return data;
+    },
+    enabled: !!modpackId,
+  });
+}
+
+export function useModpackFiles(modpackId: number | null, gameVersion?: string) {
+  return useQuery({
+    queryKey: ['modpacks', modpackId, 'files', gameVersion],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/modpacks/${modpackId}/files`, {
+        params: gameVersion ? { gameVersion } : {},
+      });
+      return data;
+    },
+    enabled: !!modpackId,
+  });
+}
+
+export function useCreateModpackServer() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (dto: CreateModpackServerDto) => {
+      const { data } = await axios.post(`${API_URL}/modpacks/create-server`, dto);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+  });
+}
+
+export function useListModpacks() {
+  return useQuery({
+    queryKey: ['modpacks', 'list'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/modpacks/list`);
+      return data;
+    },
+  });
+}
