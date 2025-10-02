@@ -57,6 +57,40 @@ export function useModpackFiles(modpackId: number | null, gameVersion?: string) 
   });
 }
 
+export function useModpackDescription(modpackId: number | null) {
+  return useQuery({
+    queryKey: ['modpacks', modpackId, 'description'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/modpacks/${modpackId}/description`);
+      return data;
+    },
+    enabled: !!modpackId,
+  });
+}
+
+export function useFileChangelog(modpackId: number | null, fileId: number | null) {
+  return useQuery({
+    queryKey: ['modpacks', modpackId, 'files', fileId, 'changelog'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/modpacks/${modpackId}/files/${fileId}/changelog`);
+      return data;
+    },
+    enabled: !!modpackId && !!fileId,
+  });
+}
+
+export function useModList(modpackId: number | null, fileId: number | null) {
+  return useQuery({
+    queryKey: ['modpacks', modpackId, 'files', fileId, 'mods'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/modpacks/${modpackId}/files/${fileId}/mods`);
+      return data;
+    },
+    enabled: !!modpackId && !!fileId,
+    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+  });
+}
+
 export function useCreateModpackServer() {
   const queryClient = useQueryClient();
 

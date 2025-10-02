@@ -15,8 +15,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useModpackDetails, useModpackFiles, useCreateModpackServer } from '@/hooks/useModpacks';
-import { Download, Calendar, Users, Loader2, Server } from 'lucide-react';
+import { useModpackDetails, useModpackFiles, useModpackDescription, useModList, useCreateModpackServer } from '@/hooks/useModpacks';
+import { Download, Calendar, Users, Loader2, Server, Search, ExternalLink, Package2 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
@@ -30,9 +30,12 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
   const router = useRouter();
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [modSearchQuery, setModSearchQuery] = useState('');
 
   const { data: details, isLoading: detailsLoading } = useModpackDetails(modpack?.id);
   const { data: filesData, isLoading: filesLoading } = useModpackFiles(modpack?.id);
+  const { data: descriptionData, isLoading: descriptionLoading } = useModpackDescription(modpack?.id);
+  const { data: modListData, isLoading: modListLoading } = useModList(modpack?.id, selectedFileId);
   const createServer = useCreateModpackServer();
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
@@ -81,6 +84,13 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
+  // Filter mods based on search query
+  const filteredMods = modListData?.mods?.filter((mod: any) =>
+    !modSearchQuery ||
+    mod.projectID?.toString().includes(modSearchQuery.toLowerCase()) ||
+    mod.fileID?.toString().includes(modSearchQuery.toLowerCase())
+  ) || [];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -107,8 +117,10 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
 
         {!showCreateForm ? (
           <Tabs defaultValue="overview" className="mt-4">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="description">Description</TabsTrigger>
+              <TabsTrigger value="mods">Mods {modListData?.modCount ? `(${modListData.modCount})` : ''}</TabsTrigger>
               <TabsTrigger value="files">Files</TabsTrigger>
             </TabsList>
 
@@ -138,11 +150,69 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
               </div>
 
               <div>
-                <h3 className="font-semibold mb-2">Description</h3>
+                <h3 className="font-semibold mb-2">Summary</h3>
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  {modpack.summary || 'No description available'}
+                  {modpack.summary || 'No summary available'}
                 </p>
               </div>
+
+              {details?.data?.screenshots && details.data.screenshots.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-2">Screenshots</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {details.data.screenshots.slice(0, 4).map((screenshot: any, idx: number) => (
+                      <div key={idx} className="relative aspect-video rounded overflow-hidden">
+                        <Image
+                          src={screenshot.url}
+                          alt={screenshot.title || `Screenshot ${idx + 1}`}
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {details?.data?.links && (
+                <div>
+                  <h3 className="font-semibold mb-2">Links</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {details.data.links.websiteUrl && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={details.data.links.websiteUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          Website
+                        </a>
+                      </Button>
+                    )}
+                    {details.data.links.wikiUrl && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={details.data.links.wikiUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          Wiki
+                        </a>
+                      </Button>
+                    )}
+                    {details.data.links.issuesUrl && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={details.data.links.issuesUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          Issues
+                        </a>
+                      </Button>
+                    )}
+                    {details.data.links.sourceUrl && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={details.data.links.sourceUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          Source
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {detailsLoading ? (
                 <div className="flex justify-center py-4">
@@ -156,6 +226,92 @@ export function ModpackDetailsModal({ modpack, open, onOpenChange }: ModpackDeta
                   <Server className="mr-2 h-4 w-4" />
                   Create Server from Modpack
                 </Button>
+              )}
+            </TabsContent>
+
+            <TabsContent value="description" className="space-y-4">
+              {descriptionLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : descriptionData?.data ? (
+                <div
+                  className="prose prose-sm dark:prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ __html: descriptionData.data }}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">No detailed description available</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="mods" className="space-y-4">
+              {!selectedFileId ? (
+                <div className="text-center py-8">
+                  <Package2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">
+                    Select a modpack version in the Files tab to view the mod list
+                  </p>
+                </div>
+              ) : modListLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <p className="text-sm text-muted-foreground ml-2">Loading mod list...</p>
+                </div>
+              ) : modListData?.mods && modListData.mods.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {modListData.modCount} mods • MC {modListData.minecraftVersion} • {modListData.modLoader}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search mods by ID..."
+                      value={modSearchQuery}
+                      onChange={(e) => setModSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+
+                  <div className="space-y-1 max-h-96 overflow-y-auto">
+                    {filteredMods.map((mod: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="p-2 border rounded text-sm hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <Package2 className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-mono text-xs">
+                              Project: {mod.projectID} • File: {mod.fileID}
+                            </span>
+                          </div>
+                          {mod.required !== false && (
+                            <span className="text-xs text-green-600 dark:text-green-400">Required</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {filteredMods.length === 0 && modSearchQuery && (
+                    <p className="text-center text-sm text-muted-foreground py-4">
+                      No mods found matching "{modSearchQuery}"
+                    </p>
+                  )}
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    Showing {filteredMods.length} of {modListData.modCount} mods
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No mod list available for this version
+                </p>
               )}
             </TabsContent>
 

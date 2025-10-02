@@ -106,6 +106,30 @@ export class CurseForgeService {
     }
   }
 
+  async getModpackDescription(modpackId: number) {
+    try {
+      const response = await this.axiosInstance.get(
+        `/v1/mods/${modpackId}/description`
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Failed to get modpack description: ${error.message}`);
+      throw new BadRequestException('Failed to fetch modpack description');
+    }
+  }
+
+  async getFileChangelog(modpackId: number, fileId: number) {
+    try {
+      const response = await this.axiosInstance.get(
+        `/v1/mods/${modpackId}/files/${fileId}/changelog`
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Failed to get file changelog: ${error.message}`);
+      throw new BadRequestException('Failed to fetch file changelog');
+    }
+  }
+
   async downloadModpackFile(downloadUrl: string): Promise<Buffer> {
     try {
       const response = await axios.get(downloadUrl, {
@@ -116,6 +140,47 @@ export class CurseForgeService {
     } catch (error) {
       this.logger.error(`Failed to download modpack file: ${error.message}`);
       throw new BadRequestException('Failed to download modpack file');
+    }
+  }
+
+  /**
+   * Get mod list from a modpack file by downloading and parsing manifest
+   */
+  async getModListFromFile(modpackId: number, fileId: number) {
+    try {
+      const fileDetails = await this.getFileDetails(modpackId, fileId);
+
+      if (!fileDetails.data || !fileDetails.data.downloadUrl) {
+        throw new BadRequestException('No download URL available for this file');
+      }
+
+      // Download the modpack file
+      this.logger.log(`Downloading modpack file from ${fileDetails.data.downloadUrl}`);
+      const modpackBuffer = await this.downloadModpackFile(fileDetails.data.downloadUrl);
+
+      // Extract and parse manifest using AdmZip
+      const AdmZip = require('adm-zip');
+      const zip = new AdmZip(modpackBuffer);
+      const manifestEntry = zip.getEntry('manifest.json');
+
+      if (!manifestEntry) {
+        throw new BadRequestException('No manifest.json found in modpack file');
+      }
+
+      const manifestData = manifestEntry.getData().toString('utf8');
+      const manifest = JSON.parse(manifestData);
+
+      return {
+        modpackName: manifest.name || 'Unknown',
+        version: manifest.version || '1.0.0',
+        minecraftVersion: manifest.minecraft?.version || 'Unknown',
+        modLoader: manifest.minecraft?.modLoaders?.[0]?.id || 'Unknown',
+        mods: manifest.files || [],
+        modCount: manifest.files?.length || 0,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get mod list: ${error.message}`);
+      throw new BadRequestException(`Failed to get mod list: ${error.message}`);
     }
   }
 

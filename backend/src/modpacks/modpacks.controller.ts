@@ -38,6 +38,14 @@ export class ModpacksController {
     return this.modpacksService.getModpackDetails(parseInt(modpackId));
   }
 
+  @Get(':modpackId/description')
+  @ApiOperation({ summary: 'Get modpack description from CurseForge' })
+  @ApiParam({ name: 'modpackId', description: 'CurseForge modpack ID' })
+  @ApiResponse({ status: 200, description: 'Modpack description (HTML)' })
+  async getModpackDescription(@Param('modpackId') modpackId: string) {
+    return this.modpacksService.getModpackDescription(parseInt(modpackId));
+  }
+
   @Get(':modpackId/files')
   @ApiOperation({ summary: 'Get modpack files from CurseForge' })
   @ApiParam({ name: 'modpackId', description: 'CurseForge modpack ID' })
@@ -48,6 +56,30 @@ export class ModpacksController {
     @Query('gameVersion') gameVersion?: string
   ) {
     return this.modpacksService.getModpackFiles(parseInt(modpackId), gameVersion);
+  }
+
+  @Get(':modpackId/files/:fileId/changelog')
+  @ApiOperation({ summary: 'Get file changelog from CurseForge' })
+  @ApiParam({ name: 'modpackId', description: 'CurseForge modpack ID' })
+  @ApiParam({ name: 'fileId', description: 'CurseForge file ID' })
+  @ApiResponse({ status: 200, description: 'File changelog (HTML)' })
+  async getFileChangelog(
+    @Param('modpackId') modpackId: string,
+    @Param('fileId') fileId: string
+  ) {
+    return this.modpacksService.getFileChangelog(parseInt(modpackId), parseInt(fileId));
+  }
+
+  @Get(':modpackId/files/:fileId/mods')
+  @ApiOperation({ summary: 'Get mod list from modpack file' })
+  @ApiParam({ name: 'modpackId', description: 'CurseForge modpack ID' })
+  @ApiParam({ name: 'fileId', description: 'CurseForge file ID' })
+  @ApiResponse({ status: 200, description: 'List of mods in the modpack' })
+  async getModList(
+    @Param('modpackId') modpackId: string,
+    @Param('fileId') fileId: string
+  ) {
+    return this.modpacksService.getModList(parseInt(modpackId), parseInt(fileId));
   }
 
   @Post('create-server')
