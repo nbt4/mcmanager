@@ -190,9 +190,22 @@ export class AgentsService {
   }
 
   private async ensureServerJar(server: Server, serverDir: string): Promise<string> {
+    // First, check if server is already set up
+    const existingExecutable = await this.detectServerExecutable(serverDir);
+    if (existingExecutable) {
+      this.logger.log(`Found existing server executable: ${existingExecutable.type} - ${path.basename(existingExecutable.path)}`);
+      return existingExecutable.path;
+    }
+
     // For Forge/NeoForge, use installer approach
     if (server.type.toUpperCase() === 'FORGE' || server.type.toUpperCase() === 'NEOFORGE') {
-      return this.installForgeServer(server, serverDir);
+      await this.installForgeServer(server, serverDir);
+      // Re-detect after installation
+      const installed = await this.detectServerExecutable(serverDir);
+      if (installed) {
+        return installed.path;
+      }
+      throw new Error(`Failed to detect executable after ${server.type} installation`);
     }
 
     const jarName = this.getJarName(server.type);
@@ -205,6 +218,88 @@ export class AgentsService {
       // JAR doesn't exist, download it
       await this.downloadServerJar(server, jarPath);
       return jarPath;
+    }
+  }
+
+  /**
+   * Autonomous detection of server executable (scripts or JARs)
+   * Returns the best executable found with priority:
+   * 1. Run scripts (run.sh, start.sh, run.bat, start.bat)
+   * 2. Server JARs (any JAR that looks like a server)
+   */
+  private async detectServerExecutable(serverDir: string): Promise<{ path: string; type: 'script' | 'jar' } | null> {
+    try {
+      const files = await fs.readdir(serverDir);
+
+      // Priority 1: Look for run scripts (modern Forge/NeoForge style)
+      const runScripts = [
+        'run.sh',
+        'start.sh',
+        'run.bat',
+        'start.bat',
+        'server.sh',
+        'server.bat',
+      ];
+
+      for (const scriptName of runScripts) {
+        if (files.includes(scriptName)) {
+          const scriptPath = path.join(serverDir, scriptName);
+          // Make sure it's executable
+          try {
+            await fs.chmod(scriptPath, 0o755);
+          } catch {
+            // Ignore chmod errors
+          }
+          this.logger.log(`Detected run script: ${scriptName}`);
+          return { path: scriptPath, type: 'script' };
+        }
+      }
+
+      // Priority 2: Look for server JARs
+      // Exclude installer JARs and look for server-like JARs
+      const jarFiles = files.filter(file =>
+        file.endsWith('.jar') &&
+        !file.includes('installer') &&
+        !file.includes('libraries') // Exclude library JARs
+      );
+
+      if (jarFiles.length === 0) {
+        return null;
+      }
+
+      // Prioritize JARs with server-related names
+      const serverKeywords = [
+        'server',
+        'forge',
+        'neoforge',
+        'fabric',
+        'paper',
+        'spigot',
+        'bukkit',
+        'purpur',
+        'folia',
+        'minecraft',
+      ];
+
+      // First, try to find a JAR with server keywords
+      for (const keyword of serverKeywords) {
+        const serverJar = jarFiles.find(jar =>
+          jar.toLowerCase().includes(keyword)
+        );
+        if (serverJar) {
+          this.logger.log(`Detected server JAR (keyword match): ${serverJar}`);
+          return { path: path.join(serverDir, serverJar), type: 'jar' };
+        }
+      }
+
+      // Fallback: use the first JAR found
+      const firstJar = jarFiles[0];
+      this.logger.log(`Detected server JAR (fallback): ${firstJar}`);
+      return { path: path.join(serverDir, firstJar), type: 'jar' };
+
+    } catch (error) {
+      this.logger.warn(`Failed to detect server executable: ${error.message}`);
+      return null;
     }
   }
 
@@ -277,18 +372,9 @@ export class AgentsService {
     return `https://download.getbukkit.org/spigot/spigot-${version}.jar`;
   }
 
-  private async installForgeServer(server: Server, serverDir: string): Promise<string> {
+  private async installForgeServer(server: Server, serverDir: string): Promise<void> {
     const type = server.type.toUpperCase();
     const version = server.version;
-
-    // Check if server is already installed (look for run.sh)
-    const existingFiles = await fs.readdir(serverDir).catch(() => []);
-    const hasRunScript = existingFiles.includes('run.sh') || existingFiles.includes('run.bat');
-
-    if (hasRunScript) {
-      this.logger.log(`Found existing ${type} server installation`);
-      return path.join(serverDir, 'run.sh');
-    }
 
     this.logger.log(`Installing ${type} server ${version}...`);
 
@@ -318,36 +404,10 @@ export class AgentsService {
       throw new Error(`Failed to install ${type} server`);
     }
 
-    // Check for run script (modern Forge/NeoForge)
-    const files = await fs.readdir(serverDir);
-    if (files.includes('run.sh')) {
-      // Make run.sh executable
-      await fs.chmod(path.join(serverDir, 'run.sh'), 0o755);
-
-      // Clean up installer
-      await fs.unlink(installerPath).catch(() => {});
-
-      this.logger.log(`${type} server installed with run script`);
-      return path.join(serverDir, 'run.sh');
-    }
-
-    // Fallback: look for traditional JAR (older Forge versions)
-    const serverJar = files.find(file =>
-      file.endsWith('.jar') &&
-      !file.includes('installer') &&
-      (file.includes('forge') || file.includes('neoforge') || file.startsWith('minecraft_server'))
-    );
-
-    if (!serverJar) {
-      this.logger.error(`Files in directory: ${files.join(', ')}`);
-      throw new Error(`${type} server installation incomplete - no run script or JAR found`);
-    }
-
     // Clean up installer
     await fs.unlink(installerPath).catch(() => {});
 
-    this.logger.log(`${type} server installed: ${serverJar}`);
-    return path.join(serverDir, serverJar);
+    this.logger.log(`${type} server installation completed`);
   }
 
   private async getForgeInstallerUrl(version: string): Promise<string> {
